@@ -65,6 +65,7 @@
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
 #include "utils/pg_rusage.h"
+#include "utils/stand_log.h"
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
@@ -1930,6 +1931,12 @@ ApplyWalRecord(XLogReaderState *xlogreader, XLogRecord *record, TimeLineID *repl
 	ErrorContextCallback errcallback;
 	bool		switchedTLI = false;
 
+	/*
+	 * For delay dashboard
+	 */
+	instr_time	start;
+	instr_time  end;
+
 	/* Setup error traceback support for ereport() */
 	errcallback.callback = rm_redo_error_callback;
 	errcallback.arg = xlogreader;
@@ -2007,8 +2014,17 @@ ApplyWalRecord(XLogReaderState *xlogreader, XLogRecord *record, TimeLineID *repl
 	if (record->xl_rmid == RM_XLOG_ID)
 		xlogrecovery_redo(xlogreader, *replayTLI);
 
+	INSTR_TIME_SET_CURRENT(start);
+
+	pg_usleep(ApplyDelay * 1000); // Apply Wait Timeout
+
 	/* Now apply the WAL record itself */
 	GetRmgr(record->xl_rmid).rm_redo(xlogreader);
+
+	INSTR_TIME_SET_CURRENT(end);
+	INSTR_TIME_SUBTRACT(end, start);
+
+	stand_telemetry_log("startup", "apply", INSTR_TIME_GET_MICROSEC(end));
 
 	/*
 	 * After redo, check whether the backup pages associated with the WAL
