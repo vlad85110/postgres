@@ -77,7 +77,7 @@ my_bgworker_main(Datum main_arg)
     {
         rest_server_poll();
         
-        pg_usleep(1000000L);
+        pg_usleep(1'000'000L);
 
         if (InterruptPending)
         {
