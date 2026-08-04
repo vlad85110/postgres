@@ -10,9 +10,9 @@
 #define STAND_TELEMETRY_LOG_PATH "/PATH/TO/replica-telemetry.jsonl" // и еще нужно дать права на этот файл postgres'у, \
     // если он не лежит в директории репозитория
 
-long WriteDelay = 500;
-long FlushDelay = 500;
-long ApplyDelay = 500;
+long WriteDelay = 100;
+long FlushDelay = 100;
+long ApplyDelay = 100;
 
 /*
  * User Signal handler for change write- and flush- delay

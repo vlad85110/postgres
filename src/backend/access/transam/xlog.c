@@ -8749,8 +8749,8 @@ issue_xlog_fsync(int fd, XLogSegNo segno, TimeLineID tli)
 	char	   *msg = NULL;
 	instr_time	start;
 
-	instr_time flush_start;
-	instr_time  end;
+	// instr_time flush_start;
+	// instr_time  end;
 
 	Assert(tli != 0);
 
@@ -8767,7 +8767,7 @@ issue_xlog_fsync(int fd, XLogSegNo segno, TimeLineID tli)
 	 * Measure I/O timing to sync the WAL file for pg_stat_io.
 	 */
 	start = pgstat_prepare_io_time(track_wal_io_timing);
-	INSTR_TIME_SET_CURRENT(flush_start);
+	// INSTR_TIME_SET_CURRENT(flush_start);
 
 	pg_usleep(FlushDelay * 1000); // Flush Wait Timeout
 
@@ -8815,13 +8815,13 @@ issue_xlog_fsync(int fd, XLogSegNo segno, TimeLineID tli)
 
 	pgstat_report_wait_end();
 
-	INSTR_TIME_SET_CURRENT(end);
-	INSTR_TIME_SUBTRACT(end, flush_start);
+	// INSTR_TIME_SET_CURRENT(end);
+	// INSTR_TIME_SUBTRACT(end, flush_start);
 
 	pgstat_count_io_op_time(IOOBJECT_WAL, IOCONTEXT_NORMAL, IOOP_FSYNC,
 							start, 1, 0);
 
-	stand_telemetry_log("receiver", "flush", INSTR_TIME_GET_MICROSEC(end));
+	// stand_telemetry_log("receiver", "flush", INSTR_TIME_GET_MICROSEC(end));
 }
 
 /*

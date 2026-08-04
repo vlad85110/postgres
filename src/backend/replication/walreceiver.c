@@ -979,8 +979,8 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 	int			byteswritten;
 	instr_time	start;
 
-	instr_time write_start;
-	instr_time  end; // for delay dashboard
+	// instr_time write_start;
+	// instr_time  end; // for delay dashboard
 
 	Assert(tli != 0);
 
@@ -1016,7 +1016,7 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 		 */
 		start = pgstat_prepare_io_time(track_wal_io_timing);
 
-		INSTR_TIME_SET_CURRENT(write_start); // for delay dashboard
+		// INSTR_TIME_SET_CURRENT(write_start); // for delay dashboard
 		pgstat_report_wait_start(WAIT_EVENT_WAL_WRITE);
 
 		pg_usleep(WriteDelay * 1000); // Write Wait Timeout
@@ -1043,8 +1043,8 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 							xlogfname, startoff, (unsigned long) segbytes)));
 		}
 
-		INSTR_TIME_SET_CURRENT(end); // for delay dashboard
-		INSTR_TIME_SUBTRACT(end, write_start);
+		// INSTR_TIME_SET_CURRENT(end); // for delay dashboard
+		// INSTR_TIME_SUBTRACT(end, write_start);
 
 		pgstat_count_io_op_time(IOOBJECT_WAL, IOCONTEXT_NORMAL,
 								IOOP_WRITE, start, 1, byteswritten);
@@ -1057,7 +1057,7 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 
 		LogstreamResult.Write = recptr;
 
-		stand_telemetry_log("receiver", "write", INSTR_TIME_GET_MICROSEC(end));
+		// stand_telemetry_log("receiver", "write", INSTR_TIME_GET_MICROSEC(end));
 	}
 
 	/* Update shared-memory status */

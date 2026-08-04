@@ -1,136 +1,92 @@
-import argparse
 import json
+import sys
 import time
 from collections import deque
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
 
-DEFAULT_PATH = Path("PATH/TO/replica-telemetry.jsonl")
-DEFAULT_WINDOW = 100
-STAGE_FILTER = "apply"
-PROCESS_FILTER = "startup"
-
-
-class TailReader:
-    """Follows a growing JSON Lines file, tolerant to rotation/truncation."""
-
-    def __init__(self, path: Path):
-        self.path = path
-        self.file = None
-        self.inode = None
-        self.position = 0
-
-    def _ensure_open(self):
-        stat = self.path.stat()
-
-        needs_reopen = (
-                self.file is None
-                or stat.st_ino != self.inode
-                or stat.st_size < self.position
-        )
-
-        if needs_reopen:
-            if self.file is not None:
-                self.file.close()
-
-            self.file = self.path.open("r", encoding="utf-8")
-            self.inode = stat.st_ino
-            self.position = 0
-
-    def read_new_lines(self):
-        try:
-            self._ensure_open()
-        except FileNotFoundError:
-            return []
-
-        lines = self.file.readlines()
-        self.position = self.file.tell()
-        return lines
-
-
-def parse_events(lines):
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            yield json.loads(line)
-        except json.JSONDecodeError:
-            continue
-
+DEFAULT_WINDOW = 1000
+DEFAULT_INTERVAL = 300
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("path", nargs="?", default=str(DEFAULT_PATH))
-    parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
-                        help="number of most recent points to display")
-    parser.add_argument("--interval", type=float, default=300,
-                        help="chart refresh interval in milliseconds")
-    args = parser.parse_args()
+    jsonlPath = Path(sys.argv[1])
+    window = DEFAULT_WINDOW
 
-    path = Path(args.path)
-    window = args.window
+    if len(sys.argv) > 2:
+        window = int(sys.argv[2])
 
-    reader = TailReader(path)
-
-    timestamps = deque(maxlen=window)
     durations_ms = deque(maxlen=window)
-    seq = deque(maxlen=window)
-    counter = 0
+    queryNumbers = deque(maxlen=window)
+    timestamps = deque(maxlen=window)
+
+    filePosition = 0
+    fileInode = None
 
     fig, ax = plt.subplots(figsize=(10, 5))
     line, = ax.plot([], [], marker="o", markersize=3, linewidth=1,
                     color="#1f77b4")
-    ax.set_title(f"WAL receiver write delay, live (last {window} events)")
-    ax.set_xlabel("event #")
+
+    ax.set_xlabel("query number")
     ax.set_ylabel("duration (ms)")
     ax.grid(True, alpha=0.3)
+    ax.set_title("Query duration")
 
-    def update(_frame):
-        nonlocal counter
+    def update(frame):
+        nonlocal filePosition
+        nonlocal fileInode
 
-        lines = reader.read_new_lines()
-        new_events = 0
-
-        for event in parse_events(lines):
-            if event.get("process") != PROCESS_FILTER:
-                continue
-            if event.get("stage") != STAGE_FILTER:
-                continue
-
-            duration_us = event.get("duration_us", 0)
-            counter += 1
-
-            seq.append(counter)
-            durations_ms.append(duration_us / 1000)
-            timestamps.append(event.get("ts", ""))
-            new_events += 1
-
-        if new_events == 0:
+        try:
+            fileStat = jsonlPath.stat()
+        except FileNotFoundError:
             return line,
 
-        line.set_data(list(seq), list(durations_ms))
+        if fileInode != fileStat.st_ino or fileStat.st_size < filePosition:
+            filePosition = 0
+            fileInode = fileStat.st_ino
+            durations_ms.clear()
+            queryNumbers.clear()
+            timestamps.clear()
 
+        with open(jsonlPath, "r", encoding="utf-8") as logfile:
+            logfile.seek(filePosition)
+            lines = logfile.readlines()
+            filePosition = logfile.tell()
+
+        for currentLine in lines:
+            try:
+                logRecord = json.loads(currentLine)
+            except json.JSONDecodeError:
+                continue
+
+            if "duration_ms" not in logRecord:
+                continue
+
+            durations_ms.append(logRecord["duration_ms"])
+            queryNumbers.append(logRecord.get("query_number", len(queryNumbers) + 1))
+            timestamps.append(logRecord.get("timestamp", ""))
+
+        if not durations_ms:
+            return line,
+
+        line.set_data(list(queryNumbers), list(durations_ms))
         ax.relim()
         ax.autoscale_view()
 
-        if timestamps:
-            ax.set_title(
-                f"WAL receiver write delay, live "
-                f"(last {window} events, latest at {timestamps[-1]})"
-            )
+        ax.set_title(
+            f"Query duration (last {window} queries, latest: {timestamps[-1]})"
+        )
 
         return line,
 
     ani = animation.FuncAnimation(
-        fig, update, interval=args.interval, blit=False, cache_frame_data=False
+        fig, update, interval=DEFAULT_INTERVAL, blit=False,
+        cache_frame_data=False
     )
 
     plt.tight_layout()
     plt.show()
-
 
 if __name__ == "__main__":
     main()
