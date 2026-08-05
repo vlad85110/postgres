@@ -1,42 +1,50 @@
 from utils.db import DBConnection
 from utils.sql_parser import parse_sql_file
 
+import argparse
 import datetime
 import json
+import logging
 import sys
 import time
 
+def parse_args():
+	parser = argparse.ArgumentParser(description="Executes SQL queries and reports duration as JSONL to stdout.")
+	parser.add_argument("sql_file", help="path to the SQL file with queries")
+	return parser.parse_args()
+
 def main():
-    queryList = parse_sql_file(sys.argv[1])
+	args = parse_args()
 
-    with open(sys.argv[2], "w", encoding="utf-8") as logfile:
-        with DBConnection(synchronous_commit="remote_write") as conn: # коннект по параметрам, указанные в .env
-            curr = conn.cursor()
-            queryNumber = 0
+	queryList = parse_sql_file(args.sql_file)
 
-            for query in queryList:
-                queryNumber += 1
-                begin_time = time.perf_counter_ns()
+	with DBConnection(synchronous_commit="remote_write") as conn:  # коннект по параметрам, указанные в .env
+		curr = conn.cursor()
+		queryNumber = 0
 
-                if query["type"] == "statement":
-                    curr.execute(query["sql"])
-                elif query["type"] == "transaction":
-                    for short_query in query["statements"]:
-                        curr.execute(short_query)
+		for query in queryList:
+			queryNumber += 1
+			begin_time = time.perf_counter_ns()
 
-                end_time = time.perf_counter_ns()
-                duration_ms = (end_time - begin_time) / 1_000_000  # convert to milliseconds
+			if query["type"] == "statement":
+				curr.execute(query["sql"])
+			elif query["type"] == "transaction":
+				for short_query in query["statements"]:
+					curr.execute(short_query)
 
-                logRecord = {
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "query_number": queryNumber,
-                    "query_type": query["type"],
-                    "duration_ms": duration_ms
-                }
+			end_time = time.perf_counter_ns()
+			duration_ms = (end_time - begin_time) / 1_000_000  # convert to milliseconds
 
-                json.dump(logRecord, logfile, ensure_ascii=False)
-                logfile.write("\n")
-                logfile.flush()
+			logRecord = {
+				"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+				"query_number": queryNumber,
+				"query_type": query["type"],
+				"duration_ms": duration_ms
+			}
+
+			json.dump(logRecord, sys.stdout, ensure_ascii=False)
+			sys.stdout.write("\n")
+			sys.stdout.flush()
 
 if __name__ == "__main__":
-    main()
+	main()

@@ -17,22 +17,12 @@ PGDLLEXPORT void
 RestBgworker_main(Datum main_arg)
 {
 
-    bool found;
-
-    shared_value = (int *) ShmemInitStruct("my_extension_shared", sizeof(int), &found);
-        
-    if (!found)
-    {
-        *shared_value = my_initial_value;
-        elog(LOG, "my_extension: shared memory initialized with value %d", my_initial_value);
-    }
-
     BackgroundWorkerUnblockSignals();
 
-    elog(LOG, "my_bgworker: started");
+    elog(LOG, "rest_bgworker: started");
 
-    register_endpoint("/value/get", handler_get_value);
-    register_endpoint("/value/set", handler_post_value);
+    // register_endpoint("/value/get", handler_get_value);
+    // register_endpoint("/value/set", handler_post_value);
 
     rest_init();
     
@@ -45,15 +35,6 @@ RestBgworker_main(Datum main_arg)
         if (InterruptPending)
         {
             break;
-        }
-
-        if (shared_value != NULL)
-        {
-            elog(LOG, "my_bgworker: shared_value = %d", *shared_value);
-        }
-        else
-        {
-            elog(LOG, "my_bgworker: shared_value not available");
         }
     }
 
@@ -75,9 +56,9 @@ register_my_bgworker(void)
     worker.bgw_start_time = BgWorkerStart_RecoveryFinished;
     worker.bgw_restart_time = 5;
     worker.bgw_main_arg = (Datum) 0;
-    snprintf(worker.bgw_library_name, BGW_MAXLEN, "my_extension");
-    snprintf(worker.bgw_function_name, BGW_MAXLEN, "my_bgworker_main");
-    snprintf(worker.bgw_name, BGW_MAXLEN, "My BGWorker");
+    snprintf(worker.bgw_library_name, BGW_MAXLEN, "rest_bgworker");
+    snprintf(worker.bgw_function_name, BGW_MAXLEN, "RestBgworker_main");
+    snprintf(worker.bgw_name, BGW_MAXLEN, "REST BGWorker");
 
     RegisterBackgroundWorker(&worker);
     worker_registered = true;
@@ -95,11 +76,11 @@ my_shmem_request(void)
 void
 _PG_init(void)
 {
-    DefineCustomIntVariable("my_extension.initial_value",
-                            "Initial value for bgworker",
-                            "Sets initial value for the bgworker's variable",
-                            &my_initial_value, 10, 0, 100,
-                            PGC_SIGHUP, 0, NULL, NULL, NULL);
+    // DefineCustomIntVariable("my_extension.initial_value",
+    //                         "Initial value for bgworker",
+    //                         "Sets initial value for the bgworker's variable",
+    //                         &my_initial_value, 10, 0, 100,
+    //                         PGC_SIGHUP, 0, NULL, NULL, NULL);
 
     shmem_request_hook = my_shmem_request;
 
