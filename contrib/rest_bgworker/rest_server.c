@@ -11,8 +11,6 @@
 #define MAX_ENDPOINTS 100
 #define MAX_CLIENTS 20
 
-extern int *shared_value;
-
 static Endpoint endpoints[MAX_ENDPOINTS];
 static Client clients[MAX_CLIENTS];
 
@@ -134,7 +132,7 @@ rest_server_poll(void)
 
     WaitEvent events[MAX_CLIENTS + 1];
 
-    int number_of_fd = WaitEventSetWait(event_set, 0, &events, MAX_CLIENTS + 1, 0);
+    int number_of_fd = WaitEventSetWait(event_set, 0, events, MAX_CLIENTS + 1, 0);
 
     for (int i = 0; i < number_of_fd; i++)
     {

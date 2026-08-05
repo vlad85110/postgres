@@ -1,8 +1,8 @@
+import argparse
 import json
+import os
 import sys
-import time
 from collections import deque
-from pathlib import Path
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -10,19 +10,23 @@ import matplotlib.pyplot as plt
 DEFAULT_WINDOW = 1000
 DEFAULT_INTERVAL = 300
 
-def main():
-    jsonlPath = Path(sys.argv[1])
-    window = DEFAULT_WINDOW
+def parse_args():
+    parser = argparse.ArgumentParser(description="Live plot of query durations read as JSONL from stdin.")
+    parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+                        help="number of most recent queries to display")
+    parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL,
+                        help="chart refresh interval in milliseconds")
+    return parser.parse_args()
 
-    if len(sys.argv) > 2:
-        window = int(sys.argv[2])
+def main():
+    args = parse_args()
+    window = args.window
+
+    os.set_blocking(sys.stdin.fileno(), False)
 
     durations_ms = deque(maxlen=window)
     queryNumbers = deque(maxlen=window)
     timestamps = deque(maxlen=window)
-
-    filePosition = 0
-    fileInode = None
 
     fig, ax = plt.subplots(figsize=(10, 5))
     line, = ax.plot([], [], marker="o", markersize=3, linewidth=1,
@@ -34,27 +38,19 @@ def main():
     ax.set_title("Query duration")
 
     def update(frame):
-        nonlocal filePosition
-        nonlocal fileInode
-
         try:
-            fileStat = jsonlPath.stat()
-        except FileNotFoundError:
+            lines = sys.stdin.readlines()
+        except (BlockingIOError, ValueError):
+            lines = []
+
+        if not lines:
             return line,
 
-        if fileInode != fileStat.st_ino or fileStat.st_size < filePosition:
-            filePosition = 0
-            fileInode = fileStat.st_ino
-            durations_ms.clear()
-            queryNumbers.clear()
-            timestamps.clear()
-
-        with open(jsonlPath, "r", encoding="utf-8") as logfile:
-            logfile.seek(filePosition)
-            lines = logfile.readlines()
-            filePosition = logfile.tell()
-
         for currentLine in lines:
+            currentLine = currentLine.strip()
+            if not currentLine:
+                continue
+
             try:
                 logRecord = json.loads(currentLine)
             except json.JSONDecodeError:
@@ -81,7 +77,7 @@ def main():
         return line,
 
     ani = animation.FuncAnimation(
-        fig, update, interval=DEFAULT_INTERVAL, blit=False,
+        fig, update, interval=args.interval, blit=False,
         cache_frame_data=False
     )
 

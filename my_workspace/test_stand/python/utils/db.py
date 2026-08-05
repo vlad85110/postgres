@@ -1,7 +1,10 @@
 import os
+from dotenv import load_dotenv
 import logging
 import psycopg
 from psycopg.connection import Connection as PGConnection
+
+load_dotenv()
 
 VALID_SYNC_MODES = {"remote_write", "on", "remote_apply"}
 
