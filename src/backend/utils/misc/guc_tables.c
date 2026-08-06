@@ -536,6 +536,9 @@ char	   *event_source;
 bool		row_security;
 bool		check_function_bodies = true;
 
+/*Custom GUC variable*/
+bool allow_ext_update_on_standby = false;
+
 /*
  * This GUC exists solely for backward compatibility, check its definition for
  * details.
@@ -2149,6 +2152,16 @@ struct config_bool ConfigureNamesBool[] =
 		},
 		&vacuum_truncate,
 		true,
+		NULL, NULL, NULL
+	},
+
+	{
+		{"allow_ext_update_on_standby", PGC_SUSET, CUSTOM_OPTIONS,
+			gettext_noop("Allow ALTER EXTENSION UPDATE on standby."),
+			gettext_noop("When enabled, allows extension updates on standby servers without WAL logging."),
+		},
+		&allow_ext_update_on_standby,
+		false,
 		NULL, NULL, NULL
 	},
 

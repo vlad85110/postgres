@@ -886,3 +886,5 @@
 #------------------------------------------------------------------------------
 
 # Add settings for extensions here
+
+#allow_ext_update_on_standby = off
