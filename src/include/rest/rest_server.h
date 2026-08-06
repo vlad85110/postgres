@@ -4,7 +4,8 @@
 #include "postgres.h"
 #include <stdbool.h>
 
-typedef const char *(*endpoint_handler)(const char *method, const char *body, void *user_data);
+typedef const char *(*endpoint_handler)(const char *method, const char *body, void *user_data,
+                                        int *status_code, const char **status_text, const char **content_type);
 
 typedef struct
 {

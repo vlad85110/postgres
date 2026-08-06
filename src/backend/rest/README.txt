@@ -13,4 +13,4 @@ enable_rest_server = false;
 
 /status - просто заглушка
 /info - показывает тип процесса ( нечеловекочитаемо ) и порт
-/lsn - работает только на walreceiver
+/lsn - выводит replay_lsn

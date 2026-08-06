@@ -8,7 +8,8 @@ extern XLogRecPtr GetXLogReplayRecPtr(void);
 extern int port;
 
 const char *
-handle_wal_position(const char *method, const char *body, void *user_data)
+handle_wal_position(const char *method, const char *body, void *user_data,
+                    int *status_code, const char **status_text, const char **content_type)
 {
     static char result[128];
     XLogRecPtr pos = GetXLogReplayRecPtr();
@@ -17,13 +18,15 @@ handle_wal_position(const char *method, const char *body, void *user_data)
 }
 
 const char *
-handle_status(const char *method, const char *body, void *user_data)
+handle_status(const char *method, const char *body, void *user_data,
+                    int *status_code, const char **status_text, const char **content_type)
 {
     return "{\"status\": \"ok\"}\n";
 }
 
 const char *
-handle_info(const char *method, const char *body, void *user_data)
+handle_info(const char *method, const char *body, void *user_data,
+                    int *status_code, const char **status_text, const char **content_type)
 {
     static char result[128];
     snprintf(result, sizeof(result), "{\"process\": \"%d\", \"port\": %d}\n", MyBackendType, port);
