@@ -29,12 +29,13 @@ int port = -1;
 static bool need_recreate = false;
 
 void
-register_endpoint(const char *url, endpoint_handler handler)
+register_endpoint(const char *url, endpoint_handler handler, void *user_data)
 {
     if (endpoints_count < MAX_ENDPOINTS)
     {
         endpoints[endpoints_count].url = url;
         endpoints[endpoints_count].handler = handler;
+        endpoints[endpoints_count].user_data = user_data;
         endpoints_count++;
     }
 }
@@ -280,7 +281,7 @@ rest_server_poll(void)
 
                         if (strcmp(url, endpoints[i].url) == 0)
                         {
-                            const char *response_body = endpoints[i].handler(method, body);
+                            const char *response_body = endpoints[i].handler(method, body, endpoints[i].user_data);
 
                             snprintf(client->response, sizeof(client->response),
                                     "HTTP/1.1 200 OK\r\n"

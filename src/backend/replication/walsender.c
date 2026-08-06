@@ -2838,8 +2838,8 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	last_reply_timestamp = GetCurrentTimestamp();
 	waiting_for_ping_response = false;
 
-	register_endpoint("/status", handle_status);
-	register_endpoint("/info", handle_info);
+	register_endpoint("/status", handle_status, NULL);
+	register_endpoint("/info", handle_info, NULL);
 
 	/*
 	 * Loop until we reach the end of this timeline or the client requests to

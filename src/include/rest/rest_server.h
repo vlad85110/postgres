@@ -4,12 +4,13 @@
 #include "postgres.h"
 #include <stdbool.h>
 
-typedef const char *(*endpoint_handler)(const char *method, const char *body);
+typedef const char *(*endpoint_handler)(const char *method, const char *body, void *user_data);
 
 typedef struct
 {
     const char *url;
     endpoint_handler handler;
+    void *user_data
 
 } Endpoint;
 
@@ -28,7 +29,7 @@ typedef struct
 } Client;
 
 extern void rest_init(int child_type);
-extern void register_endpoint(const char *url, endpoint_handler handler);
+extern void register_endpoint(const char *url, endpoint_handler handler, void *user_data);
 extern void rest_server_poll(void);
 extern int server_socket;
 extern bool enable_rest_server;

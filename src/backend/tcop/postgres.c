@@ -4515,8 +4515,8 @@ PostgresMain(const char *dbname, const char *username)
 	if (!ignore_till_sync)
 		send_ready_for_query = true;	/* initially, or after error */
 
-	register_endpoint("/info", handle_info);
-	register_endpoint("/status", handle_status);
+	register_endpoint("/info", handle_info, NULL);
+	register_endpoint("/status", handle_status, NULL);
 	
 	rest_init(MyBackendType);
 
