@@ -25,6 +25,7 @@
 #include "storage/pmsignal.h"
 #include "storage/proc.h"
 #include "utils/syscache.h"
+#include "utils/guc.h"
 
 
 /* Number of OIDs to prefetch (preallocate) per XLOG write */
@@ -99,7 +100,7 @@ GetNewTransactionId(bool isSubXact)
 	}
 
 	/* safety check, we should never get this far in a HS standby */
-	if (RecoveryInProgress())
+	if (RecoveryInProgress() && !allow_ext_update_on_standby)
 		elog(ERROR, "cannot assign TransactionIds during recovery");
 
 	LWLockAcquire(XidGenLock, LW_EXCLUSIVE);
