@@ -79,6 +79,8 @@
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
 #include "utils/timestamp.h"
+#include "rest/rest_server.h"
+#include "rest/endpoint_handlers.h"
 
 
 /*
@@ -311,6 +313,10 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 	if (sender_host)
 		pfree(sender_host);
 
+	register_endpoint("/status", handle_status);
+	register_endpoint("/lsn", handle_wal_position);
+	register_endpoint("/info", handle_info);
+
 	first_stream = true;
 	for (;;)
 	{
@@ -506,6 +512,8 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 
 				/* Process any requests or signals received recently */
 				CHECK_FOR_INTERRUPTS();
+
+				rest_server_poll();
 
 				if (ConfigReloadPending)
 				{
