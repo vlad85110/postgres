@@ -4517,10 +4517,10 @@ PostgresMain(const char *dbname, const char *username)
 
 	register_endpoint("/info", handle_info, NULL);
 	register_endpoint("/status", handle_status, NULL);
-	
+
 	rest_init(MyBackendType);
 
-	if (enable_rest_server && server_socket >= 0) 
+	if (enable_rest_server && server_socket >= 0)
 	{
 		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
 	}
