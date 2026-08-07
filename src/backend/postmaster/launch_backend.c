@@ -280,6 +280,7 @@ postmaster_child_launch(BackendType child_type, int child_slot,
 		//elog(LOG, "rest: child_type=%d", child_type);
 		if (child_type != B_BACKEND)
 		{
+		//	elog(LOG, "rest: calling rest_init for child_type=%d", child_type);
 			rest_init(child_type);
 		}
 

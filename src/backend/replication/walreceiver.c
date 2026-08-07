@@ -313,9 +313,9 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 	if (sender_host)
 		pfree(sender_host);
 
-	register_endpoint("/status", handle_status);
-	register_endpoint("/lsn", handle_wal_position);
-	register_endpoint("/info", handle_info);
+	register_endpoint("/status", handle_status, NULL);
+	register_endpoint("/lsn", handle_wal_position, NULL);
+	register_endpoint("/info", handle_info, NULL);
 
 	first_stream = true;
 	for (;;)
