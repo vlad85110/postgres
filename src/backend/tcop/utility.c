@@ -138,7 +138,6 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_AlterEnumStmt:
 		case T_AlterEventTrigStmt:
 		case T_AlterExtensionContentsStmt:
-		case T_AlterExtensionStmt:
 		case T_AlterFdwStmt:
 		case T_AlterForeignServerStmt:
 		case T_AlterFunctionStmt:
@@ -213,6 +212,14 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_ViewStmt:
 			{
 				/* DDL is not read-only, and neither is TRUNCATE. */
+				return COMMAND_IS_NOT_READ_ONLY;
+			}
+
+		case T_AlterExtensionStmt:
+			{
+				if (allow_ext_update_on_standby){
+					return COMMAND_IS_NOT_READ_ONLY | COMMAND_OK_IN_RECOVERY | COMMAND_OK_IN_READ_ONLY_TXN;
+				}
 				return COMMAND_IS_NOT_READ_ONLY;
 			}
 
