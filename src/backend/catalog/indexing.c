@@ -315,6 +315,8 @@ CatalogTupleUpdate(Relation heapRel, ItemPointer otid, HeapTuple tup)
 	CatalogIndexState indstate;
 	TU_UpdateIndexes updateIndexes = TU_All;
 
+	ereport(LOG, errmsg("CatalogTupleUpdate: START"));
+
 	CatalogTupleCheckConstraints(heapRel, tup);
 
 	indstate = CatalogOpenIndexes(heapRel);
@@ -323,6 +325,7 @@ CatalogTupleUpdate(Relation heapRel, ItemPointer otid, HeapTuple tup)
 
 	CatalogIndexInsert(indstate, tup, updateIndexes);
 	CatalogCloseIndexes(indstate);
+	ereport(LOG, errmsg("CatalogTupleUpdate: FINISH"));
 }
 
 /*

@@ -512,6 +512,7 @@ ProcessUtility(PlannedStmt *pstmt,
 			   DestReceiver *dest,
 			   QueryCompletion *qc)
 {
+	ereport(LOG, errmsg("ProcessUtility: START"));
 	Assert(IsA(pstmt, PlannedStmt));
 	Assert(pstmt->commandType == CMD_UTILITY);
 	Assert(queryString != NULL);	/* required as of 8.4 */
@@ -530,6 +531,7 @@ ProcessUtility(PlannedStmt *pstmt,
 		standard_ProcessUtility(pstmt, queryString, readOnlyTree,
 								context, params, queryEnv,
 								dest, qc);
+	ereport(LOG, errmsg("ProcessUtility: FINISH"));
 }
 
 /*
@@ -562,6 +564,7 @@ standard_ProcessUtility(PlannedStmt *pstmt,
 	ParseState *pstate;
 	int			readonly_flags;
 
+	ereport(LOG, errmsg("standard_ProcessUtility: START"));
 	/* This can recurse, so check for excessive recursion */
 	check_stack_depth();
 
@@ -1088,6 +1091,7 @@ standard_ProcessUtility(PlannedStmt *pstmt,
 	 * #15631).
 	 */
 	CommandCounterIncrement();
+	ereport(LOG, errmsg("standard_ProcessUtility: FINISH"));
 }
 
 /*

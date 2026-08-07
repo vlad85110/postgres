@@ -1207,6 +1207,7 @@ execute_extension_script(Oid extensionOid, ExtensionControlFile *control,
 	StringInfoData pathbuf;
 	ListCell   *lc;
 	ListCell   *lc2;
+	ereport(LOG, errmsg("execute_extension_script: START"));
 
 	/*
 	 * Enforce superuser-ness if appropriate.  We postpone these checks until
@@ -1455,6 +1456,8 @@ execute_extension_script(Oid extensionOid, ExtensionControlFile *control,
 	 */
 	if (switch_to_superuser)
 		SetUserIdAndSecContext(save_userid, save_sec_context);
+
+	ereport(LOG, errmsg("execute_extension_script: FINISH"));
 }
 
 /*
@@ -3422,6 +3425,7 @@ ExecAlterExtensionStmt(ParseState *pstate, AlterExtensionStmt *stmt)
 	ListCell   *lc;
 	ObjectAddress address;
 
+	ereport(LOG, errmsg("ExecAlterExtensionStmt: START"));
 	/*
 	 * We use global variables to track the extension being created, so we can
 	 * create/update only one extension at the same time.
@@ -3540,6 +3544,7 @@ ExecAlterExtensionStmt(ParseState *pstate, AlterExtensionStmt *stmt)
 
 	ObjectAddressSet(address, ExtensionRelationId, extensionOid);
 
+	ereport(LOG, errmsg("ExecAlterExtensionStmt: FINISH"));
 	return address;
 }
 
@@ -3563,6 +3568,7 @@ ApplyExtensionUpdates(Oid extensionOid,
 	const char *oldVersionName = initialVersion;
 	ListCell   *lcv;
 
+	ereport(LOG, errmsg("ApplyExtensionUpdates: START"));
 	foreach(lcv, updateVersions)
 	{
 		char	   *versionName = (char *) lfirst(lcv);
@@ -3699,6 +3705,7 @@ ApplyExtensionUpdates(Oid extensionOid,
 		 */
 		oldVersionName = versionName;
 	}
+	ereport(LOG, errmsg("ApplyExtensionUpdates: FINISH"));
 }
 
 /*

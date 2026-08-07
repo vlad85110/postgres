@@ -1020,6 +1020,7 @@ exec_simple_query(const char *query_string)
 	bool		use_implicit_block;
 	char		msec_str[32];
 
+	ereport(LOG, errmsg("exec_simple_query: START"));
 	/*
 	 * Report query to various monitoring facilities.
 	 */
@@ -1379,6 +1380,7 @@ exec_simple_query(const char *query_string)
 	TRACE_POSTGRESQL_QUERY_DONE(query_string);
 
 	debug_query_string = NULL;
+	ereport(LOG, errmsg("exec_simple_query: FINISH"));
 }
 
 /*

@@ -53,6 +53,7 @@
 #include "utils/inval.h"
 #include "utils/spccache.h"
 #include "utils/syscache.h"
+#include "utils/guc.h"
 
 
 static HeapTuple heap_prepare_insert(Relation relation, HeapTuple tup,
@@ -3368,6 +3369,7 @@ heap_update(Relation relation, ItemPointer otid, HeapTuple newtup,
 				infomask_new_tuple,
 				infomask2_new_tuple;
 
+	ereport(LOG, errmsg("heap_update: START"));
 	Assert(ItemPointerIsValid(otid));
 
 	/* Cheap, simplistic check that the tuple matches the rel's rowtype. */
@@ -3970,7 +3972,8 @@ l2:
 
 		MarkBufferDirty(buffer);
 
-		if (RelationNeedsWAL(relation))
+		if (RecoveryInProgress() && allow_ext_update_on_standby) {}
+		else if (RelationNeedsWAL(relation))
 		{
 			xl_heap_lock xlrec;
 			XLogRecPtr	recptr;
@@ -4308,7 +4311,8 @@ l2:
 	MarkBufferDirty(buffer);
 
 	/* XLOG stuff */
-	if (RelationNeedsWAL(relation))
+	if (RecoveryInProgress() && allow_ext_update_on_standby) {}
+	else if (RelationNeedsWAL(relation))
 	{
 		XLogRecPtr	recptr;
 
@@ -4414,6 +4418,7 @@ l2:
 	bms_free(modified_attrs);
 	bms_free(interesting_attrs);
 
+	ereport(LOG, errmsg("heap_update: FINISH"));
 	return TM_Ok;
 }
 
@@ -4692,6 +4697,8 @@ simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup,
 	TM_FailureData tmfd;
 	LockTupleMode lockmode;
 
+	ereport(LOG, errmsg("simple_heap_update: START"));
+
 	result = heap_update(relation, otid, tup,
 						 GetCurrentCommandId(true), InvalidSnapshot,
 						 true /* wait for commit */ ,
@@ -4719,6 +4726,7 @@ simple_heap_update(Relation relation, ItemPointer otid, HeapTuple tup,
 			elog(ERROR, "unrecognized heap_update status: %u", result);
 			break;
 	}
+	ereport(LOG, errmsg("simple_heap_update: FINISH"));
 }
 
 
