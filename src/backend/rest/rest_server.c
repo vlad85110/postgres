@@ -301,7 +301,7 @@ rest_build_response(Client *client, Response *response)
 static void
 rest_handle_request(Client *client, int slot)
 {
-    ssize_t bytes_read = read(client->fd, client->read_buffer + client->read_pos, 
+    ssize_t bytes_read = read(client->fd, client->read_buffer + client->read_pos,
                                           sizeof(client->read_buffer) - client->read_pos - 1);
     if (bytes_read < 0) {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
