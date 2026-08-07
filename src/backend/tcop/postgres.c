@@ -81,6 +81,8 @@
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+#include "rest/rest_server.h"
+#include "rest/endpoint_handlers.h"
 
 /* ----------------
  *		global variables
@@ -4513,6 +4515,16 @@ PostgresMain(const char *dbname, const char *username)
 	if (!ignore_till_sync)
 		send_ready_for_query = true;	/* initially, or after error */
 
+	register_endpoint("/info", handle_info);
+	register_endpoint("/status", handle_status);
+	
+	rest_init(MyBackendType);
+
+	if (enable_rest_server && server_socket >= 0) 
+	{
+		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+	}
+
 	/*
 	 * Non-error queries loop here.
 	 */
@@ -4696,6 +4708,8 @@ PostgresMain(const char *dbname, const char *username)
 		 */
 		DoingCommandRead = true;
 
+		rest_server_poll();
+
 		/*
 		 * (3) read a command (loop blocks here)
 		 */
@@ -4730,6 +4744,9 @@ PostgresMain(const char *dbname, const char *username)
 		 * before resetting DoingCommandRead.
 		 */
 		CHECK_FOR_INTERRUPTS();
+
+		rest_server_poll();
+
 		DoingCommandRead = false;
 
 		/*
