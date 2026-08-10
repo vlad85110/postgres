@@ -206,7 +206,7 @@ WaitLatch(Latch *latch, int wakeEvents, long timeout,
 						 &event, 1,
 						 wait_event_info) == 0)
 		return WL_TIMEOUT;
-	else 
+	else
 	{
 		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
 		{

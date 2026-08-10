@@ -3823,7 +3823,7 @@ WalSndWait(uint32 socket_events, long timeout, uint32 wait_event)
 
 	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1)
 	{
-		
+
 		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
 		{
 			ConditionVariableCancelSleep();
@@ -3835,7 +3835,7 @@ WalSndWait(uint32 socket_events, long timeout, uint32 wait_event)
 			ConditionVariableCancelSleep();
 			proc_exit(1);
 		}
-		
+
 	}
 
 	ConditionVariableCancelSleep();
