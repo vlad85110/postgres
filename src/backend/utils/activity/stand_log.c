@@ -2,21 +2,19 @@
 
 #include <signal.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <time.h>
 #include "storage/fd.h"
+#include "utils/elog.h"
 
-#define TEST_DELAY_DELTA_MS    200
-#define TEST_DELAY_MAX_MS      60000
-#define STAND_TELEMETRY_LOG_PATH "/PATH/TO/replica-telemetry.jsonl" // и еще нужно дать права на этот файл postgres'у, \
-    // если он не лежит в директории репозитория
+#define TEST_DELAY_DELTA_MS 200
+#define TEST_DELAY_MAX_MS 60000
+#define FIXED_PHASE_DELAY_MS 1000
 
-long WriteDelay = 100;
-long FlushDelay = 100;
-long ApplyDelay = 100;
+long WriteDelay = 500;
+long FlushDelay = 0;
+long ApplyDelay = 0;
 
-/*
- * User Signal handler for change write- and flush- delay
- */
 static volatile sig_atomic_t test_delay_increment_pending = false;
 
 void
@@ -26,70 +24,29 @@ SignalHandlerForChangeDelays(SIGNAL_ARGS)
 }
 
 void
-ChangeWFDelays() // WF - Write and Flush
+ChangeWFDelays(void) // WF - Write and Flush
 {
+    static bool fixed_phase_entered = false;
+
     if (!test_delay_increment_pending)
         return;
 
     test_delay_increment_pending = false;
 
-    WriteDelay = Min(WriteDelay + TEST_DELAY_DELTA_MS,
-                     TEST_DELAY_MAX_MS);
-    FlushDelay = Min(FlushDelay + TEST_DELAY_DELTA_MS,
-                     TEST_DELAY_MAX_MS);
+    if (!fixed_phase_entered)
+    {
+        /* Первый полученный SIGUSR2: переход из "без задержки" в "фиксированную задержку". */
+        fixed_phase_entered = true;
+        WriteDelay = FIXED_PHASE_DELAY_MS;
 
-    stand_log("/PATH/TO/wal_receiver.log",
-        "walreceiver test delays increased: write=%d ms, flush=%d ms",
-         WriteDelay,
-         FlushDelay);
-}
-
-void
-stand_telemetry_log(const char *process, const char *stage, int64 duration_us)
-{
-    FILE	   *f;
-    time_t		now;
-    char		timebuf[16];
-
-    f = fopen(STAND_TELEMETRY_LOG_PATH, "a");
-    if (f == NULL)
+        ereport(LOG,
+                errmsg("Entered fixed delay phase: WriteDelay = %ld", WriteDelay));
         return;
+    }
 
-    now = time(NULL);
-    strftime(timebuf, sizeof(timebuf), "%H:%M:%S", localtime(&now));
+    /* Каждый следующий SIGUSR2: фаза роста задержки. */
+    WriteDelay = Min(WriteDelay + TEST_DELAY_DELTA_MS, TEST_DELAY_MAX_MS);
 
-    fprintf(f,
-            "{\"ts\":\"%s\","
-            "\"process\":\"%s\","
-            "\"stage\":\"%s\","
-            "\"duration_us\":%lld}\n",
-            timebuf,
-            process,
-            stage,
-            (long long) duration_us);
-
-    fflush(f);
-    fclose(f);
-}
-
-void
-print_log(const char *filename, const char *message, ...)
-{
-    FILE *f = fopen(filename, "a");
-    if (f == NULL)
-        return;
-
-    time_t now = time(NULL);
-    char timebuf[32];
-    strftime(timebuf, sizeof(timebuf), "%Y-%m-%d %H:%M:%S", localtime(&now));
-    fprintf(f, "[%s] ", timebuf);
-
-    va_list args;
-    va_start(args, message);
-    vfprintf(f, message, args);
-    va_end(args);
-
-    fprintf(f, "\n");
-    fflush(f);
-    fclose(f);
+    ereport(LOG,
+            errmsg("Delays changed: WriteDelay = %ld, FlushDelay = %ld", WriteDelay, FlushDelay));
 }

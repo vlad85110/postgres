@@ -508,6 +508,8 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 				/* Process any requests or signals received recently */
 				CHECK_FOR_INTERRUPTS();
 
+				ChangeWFDelays();
+
 				if (ConfigReloadPending)
 				{
 					ConfigReloadPending = false;
