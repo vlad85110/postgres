@@ -7,7 +7,6 @@ from psycopg.connection import Connection as PGConnection
 load_dotenv()
 
 VALID_SYNC_MODES = {"remote_write", "on", "remote_apply"}
-
 DEFAULT_DSN_PARAMS = {
     "host": os.environ.get("PGHOST", "localhost"),
     "port": os.environ.get("PGPORT", "5432"),
@@ -25,7 +24,6 @@ def get_connection(
     password: str = None,
     connect_timeout: int = 5,
 ) -> PGConnection:
-
     params = {
         "host": host or DEFAULT_DSN_PARAMS["host"],
         "port": port or DEFAULT_DSN_PARAMS["port"],
