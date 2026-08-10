@@ -1,4 +1,4 @@
-#include "utils/stand_log.h"
+#include "utils/stand_delay_setter.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -11,7 +11,7 @@
 #define TEST_DELAY_MAX_MS 60000
 #define FIXED_PHASE_DELAY_MS 1000
 
-long WriteDelay = 500;
+long WriteDelay = 0;
 long FlushDelay = 0;
 long ApplyDelay = 0;
 

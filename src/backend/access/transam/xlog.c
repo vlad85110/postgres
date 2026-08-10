@@ -100,7 +100,7 @@
 #include "utils/ps_status.h"
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
-#include "utils/stand_log.h"
+#include "utils/stand_delay_setter.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"

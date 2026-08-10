@@ -35,7 +35,7 @@ OBJS = \
 	pgstat_xact.o \
 	wait_event.o \
 	wait_event_funcs.o \
-	stand_log.o
+	stand_delay_setter.o
 
 # Force these dependencies to be known even without dependency info built:
 wait_event.o: wait_event.c $(top_builddir)/src/backend/utils/pgstat_wait_event.c

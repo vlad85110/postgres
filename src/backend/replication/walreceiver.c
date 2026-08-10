@@ -78,7 +78,7 @@
 #include "utils/guc.h"
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
-#include "utils/stand_log.h"
+#include "utils/stand_delay_setter.h"
 #include "utils/timestamp.h"
 
 
