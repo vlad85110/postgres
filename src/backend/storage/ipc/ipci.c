@@ -51,7 +51,7 @@
 #include "storage/sinvaladt.h"
 #include "utils/guc.h"
 #include "utils/injection_point.h"
-#include "../../../include/stand/stand_delay_setter.h"
+#include "stand/stand_delay_setter.h"
 
 /* GUCs */
 int			shared_memory_type = DEFAULT_SHARED_MEMORY_TYPE;
