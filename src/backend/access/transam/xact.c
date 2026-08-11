@@ -1779,6 +1779,24 @@ RecordTransactionAbort(bool isSubXact)
 	TimestampTz xact_time;
 	bool		replorigin;
 
+	ereport(LOG, errmsg("RecordTransactionAbort: START"));
+	if (RecoveryInProgress() && allow_ext_update_on_standby){
+		if (!TransactionIdIsValid(xid))
+		{
+			if (!isSubXact)
+				XactLastRecEnd = 0;
+			return InvalidTransactionId;
+		}
+		nchildren = xactGetCommittedChildren(&children);
+		TransactionIdAbortTree(xid, nchildren, children);
+
+		if (!isSubXact)
+			XactLastRecEnd = 0;
+
+		ereport(LOG, errmsg("RecordTransactionAbort: FINISH"));
+		return xid; //пока непонятно что с дочерними транзакциями
+	}
+
 	/*
 	 * If we haven't been assigned an XID, nobody will care whether we aborted
 	 * or not.  Hence, we're done in that case.  It does not matter if we have
@@ -1889,6 +1907,7 @@ RecordTransactionAbort(bool isSubXact)
 	if (ndroppedstats)
 		pfree(droppedstats);
 
+	ereport(LOG, errmsg("RecordTransactionAbort: FINISH"));
 	return latestXid;
 }
 
@@ -2826,6 +2845,7 @@ PrepareTransaction(void)
 static void
 AbortTransaction(void)
 {
+	ereport(LOG, errmsg("AbortTransaction: START"));
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
@@ -3018,6 +3038,7 @@ AbortTransaction(void)
 	 * State remains TRANS_ABORT until CleanupTransaction().
 	 */
 	RESUME_INTERRUPTS();
+	ereport(LOG, errmsg("AbortTransaction: FINISH"));
 }
 
 /*
