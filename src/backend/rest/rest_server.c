@@ -16,6 +16,8 @@
 
 char *rest_include_processes = NULL;
 
+extern int PostPortNumber;
+
 static Endpoint endpoints[MAX_ENDPOINTS];
 static Client clients[MAX_CLIENTS];
 
@@ -35,6 +37,7 @@ get_process_name(int child_type)
     {
         case B_WAL_RECEIVER:   return "walreceiver";
         case B_WAL_SENDER:     return "walsender";
+        case B_WAL_WRITER:     return "walwriter";
         default:               return "unknown";
     }
 }
@@ -102,8 +105,9 @@ rest_port(int child_type)
 {
     switch(child_type)
     {
-        case B_WAL_RECEIVER: return 8080;
-        case B_WAL_SENDER: return 8081;
+        case B_WAL_RECEIVER:    return 8080;
+        case B_WAL_SENDER:      return 8081;
+        case B_WAL_WRITER:      return 8082;
         default: return -1;
     }
 }

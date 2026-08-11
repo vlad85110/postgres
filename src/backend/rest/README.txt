@@ -7,6 +7,7 @@ rest_include_process = 'walreceiver, walsender'
 
 8080 - walreceiver
 8081 - walsender
+8082 - walwriter
 
 доступны для теста эндпоинты 
 
