@@ -3,9 +3,6 @@
 #include "stand/stand_delay_setter.h"
 
 #include <signal.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <time.h>
 #include "storage/fd.h"
 #include "storage/shmem.h"
 #include "utils/elog.h"
