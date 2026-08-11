@@ -126,9 +126,10 @@ rest_init(int child_type)
         return;
     }
 
-    //elog(LOG, "rest: am_walsender=%d, MyBackendType=%d", am_walsender, MyBackendType);
+    ereport(LOG, errmsg_internal("rest: am_walsender=%d, MyBackendType=%d", am_walsender, MyBackendType));
+
     port = rest_port(child_type);
-    //elog(LOG, "rest: port=%d", port);
+    ereport(LOG, errmsg_internal("rest: port=%d", port));
 
     if (port == -1)
     {

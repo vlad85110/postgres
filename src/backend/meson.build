@@ -27,13 +27,14 @@ subdir('port')
 subdir('postmaster')
 subdir('regex')
 subdir('replication')
+subdir('rest')
 subdir('rewrite')
+subdir('stand')
 subdir('statistics')
 subdir('storage')
 subdir('tcop')
 subdir('tsearch')
 subdir('utils')
-
 subdir('po', if_found: libintl)
 
 

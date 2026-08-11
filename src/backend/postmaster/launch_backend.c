@@ -47,6 +47,7 @@
 #include "postmaster/walwriter.h"
 #include "replication/slotsync.h"
 #include "replication/walreceiver.h"
+#include "rest/rest_server.h"
 #include "storage/dsm.h"
 #include "storage/io_worker.h"
 #include "storage/pg_shmem.h"
@@ -280,7 +281,7 @@ postmaster_child_launch(BackendType child_type, int child_slot,
 		//elog(LOG, "rest: child_type=%d", child_type);
 		if (child_type != B_BACKEND)
 		{
-		//	elog(LOG, "rest: calling rest_init for child_type=%d", child_type);
+			elog(LOG, "rest: calling rest_init for child_type=%d", child_type);
 			rest_init(child_type);
 		}
 
