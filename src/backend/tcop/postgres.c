@@ -2224,7 +2224,8 @@ exec_execute_message(const char *portal_name, long max_rows)
 	 * the query from the start. atStart is never reset for a v3 portal, so we
 	 * are safe to use this check.
 	 */
-	execute_is_fetch = !portal->atStart;
+	execute_is_fetch = !portal->atStart;c/backend/tcop/postgres.c
+
 
 	/* Log immediately if dictated by log_statement */
 	if (check_log_statement(portal->stmts))
@@ -2827,6 +2828,7 @@ start_xact_command(void)
 static void
 finish_xact_command(void)
 {
+	ereport(LOG, errmsg("finish_xact_command: START"));
 	/* cancel active statement timeout after each command */
 	disable_statement_timeout();
 
@@ -2847,6 +2849,7 @@ finish_xact_command(void)
 
 		xact_started = false;
 	}
+	ereport(LOG, errmsg("finish_xact_command: FINISH"));
 }
 
 

@@ -1327,7 +1327,22 @@ RecordTransactionCommit(void)
 	SharedInvalidationMessage *invalMessages = NULL;
 	bool		RelcacheInitFileInval = false;
 	bool		wrote_xlog;
+	
+	if (RecoveryInProgress() && allow_ext_update_on_standby)
+	{
 
+		nchildren = xactGetCommittedChildren(&children);
+
+		TransactionIdCommitTree(xid, nchildren, children);
+
+		latestXid = xid;   //пока что дочерние транзакции не обрабатываются нормально
+
+		XactLastCommitEnd = XactLastRecEnd;
+		XactLastRecEnd = 0;
+
+		ereport(LOG, errmsg("RecordTransactionCommit: FINISH"));
+		return latestXid;
+	}
 	/*
 	 * Log pending invalidations for logical decoding of in-progress
 	 * transactions.  Normally for DDLs, we log this at each command end,
@@ -2231,6 +2246,8 @@ CommitTransaction(void)
 	TransactionId latestXid;
 	bool		is_parallel_worker;
 
+	ereport(LOG, errmsg("CommitTransaction: START"));
+
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
 	/* Enforce parallel mode restrictions during parallel worker commit. */
@@ -2503,6 +2520,7 @@ CommitTransaction(void)
 	s->state = TRANS_DEFAULT;
 
 	RESUME_INTERRUPTS();
+	ereport(LOG, errmsg("CommitTransaction: FINISH"));
 }
 
 
@@ -3156,6 +3174,7 @@ RestoreTransactionCharacteristics(const SavedTransactionCharacteristics *s)
 void
 CommitTransactionCommand(void)
 {
+	ereport(LOG, errmsg("CommitTransactionCommand: START"));
 	/*
 	 * Repeatedly call CommitTransactionCommandInternal() until all the work
 	 * is done.
@@ -3163,6 +3182,7 @@ CommitTransactionCommand(void)
 	while (!CommitTransactionCommandInternal())
 	{
 	}
+	ereport(LOG, errmsg("CommitTransactionCommand: FINISH"));
 }
 
 /*
@@ -3176,6 +3196,7 @@ CommitTransactionCommandInternal(void)
 {
 	TransactionState s = CurrentTransactionState;
 	SavedTransactionCharacteristics savetc;
+	ereport(LOG, errmsg("CommitTransactionCommandInternal: START"));
 
 	/* Must save in case we need to restore below */
 	SaveTransactionCharacteristics(&savetc);
@@ -3438,6 +3459,7 @@ CommitTransactionCommandInternal(void)
 			break;
 	}
 
+	ereport(LOG, errmsg("CommitTransactionCommandInternal: FINISH"));
 	/* Done, no more iterations required */
 	return true;
 }
