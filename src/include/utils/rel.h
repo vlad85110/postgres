@@ -636,10 +636,10 @@ RelationCloseSmgr(Relation relation)
  * truncated in the current transaction.  See "Skipping WAL for New
  * RelFileLocator" in src/backend/access/transam/README.
  */
-#define RelationNeedsWAL(relation)										\
+#define RelationNeedsWAL(relation)	((RecoveryInProgress() && allow_ext_update_on_standby) ? false : \
 	(RelationIsPermanent(relation) && (XLogIsNeeded() ||				\
 	  (relation->rd_createSubid == InvalidSubTransactionId &&			\
-	   relation->rd_firstRelfilelocatorSubid == InvalidSubTransactionId)))
+	   relation->rd_firstRelfilelocatorSubid == InvalidSubTransactionId))))
 
 /*
  * RelationUsesLocalBuffers

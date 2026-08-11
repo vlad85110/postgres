@@ -3972,8 +3972,7 @@ l2:
 
 		MarkBufferDirty(buffer);
 
-		if (RecoveryInProgress() && allow_ext_update_on_standby) {}
-		else if (RelationNeedsWAL(relation))
+		if (RelationNeedsWAL(relation))
 		{
 			xl_heap_lock xlrec;
 			XLogRecPtr	recptr;
@@ -4311,8 +4310,7 @@ l2:
 	MarkBufferDirty(buffer);
 
 	/* XLOG stuff */
-	if (RecoveryInProgress() && allow_ext_update_on_standby) {}
-	else if (RelationNeedsWAL(relation))
+	if (RelationNeedsWAL(relation))
 	{
 		XLogRecPtr	recptr;
 
