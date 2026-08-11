@@ -2224,7 +2224,7 @@ exec_execute_message(const char *portal_name, long max_rows)
 	 * the query from the start. atStart is never reset for a v3 portal, so we
 	 * are safe to use this check.
 	 */
-	execute_is_fetch = !portal->atStart;c/backend/tcop/postgres.c
+	execute_is_fetch = !portal->atStart;
 
 
 	/* Log immediately if dictated by log_statement */
