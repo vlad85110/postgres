@@ -32,6 +32,7 @@ typedef struct
 extern void rest_init(int child_type);
 extern void register_endpoint(const char *url, endpoint_handler handler, void *user_data);
 extern void rest_server_poll(void);
+extern const char *get_process_name(int child_type);
 extern char *rest_include_processes;
 extern bool rest_enabled_for_process(int child_type);
 extern int server_socket;

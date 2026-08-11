@@ -30,15 +30,18 @@ int port = -1;
 
 static bool need_recreate = false;
 
-static const char *
+const char *
 get_process_name(int child_type)
 {
     switch (child_type)
     {
-        case B_WAL_RECEIVER:   return "walreceiver";
-        case B_WAL_SENDER:     return "walsender";
-        case B_WAL_WRITER:     return "walwriter";
-        default:               return "unknown";
+        case B_WAL_RECEIVER:    return "walreceiver";
+        case B_WAL_SENDER:      return "walsender";
+        case B_WAL_WRITER:      return "walwriter";
+        case B_BG_WRITER:       return "bgwriter";
+        case B_CHECKPOINTER:    return "checkpointer";
+        case B_AUTOVAC_LAUNCHER:return "autovacuum";
+        default:                return "unknown";
     }
 }
 
@@ -108,7 +111,10 @@ rest_port(int child_type)
         case B_WAL_RECEIVER:    return 8080;
         case B_WAL_SENDER:      return 8081;
         case B_WAL_WRITER:      return 8082;
-        default: return -1;
+        case B_BG_WRITER:       return PostPortNumber + 3000;
+        case B_CHECKPOINTER:    return PostPortNumber + 3100;
+        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 3200;
+        default:                return -1;
     }
 }
 

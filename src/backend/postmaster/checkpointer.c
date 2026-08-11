@@ -64,6 +64,8 @@
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "rest/endpoint_handlers.h"
+#include "rest/rest_server.h"
 
 
 /*----------
@@ -342,6 +344,9 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 	 */
 	ProcGlobal->checkpointerProc = MyProcNumber;
 
+	register_endpoint("/info", handle_info, NULL);
+	register_endpoint("/status", handle_status, NULL);
+
 	/*
 	 * Loop until we've been asked to write the shutdown checkpoint or
 	 * terminate.
@@ -365,6 +370,9 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 		AbsorbSyncRequests();
 
 		ProcessCheckpointerInterrupts();
+
+		rest_server_poll();
+
 		if (ShutdownXLOGPending || ShutdownRequestPending)
 			break;
 

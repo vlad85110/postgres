@@ -3,14 +3,17 @@
 можно включить в postgresql.conf
 rest_include_process = 'walreceiver, walsender'
 
-запрос на порт 
+запрос на порт (*port = порт, на котором запущен постгрес)
 
-8080 - walreceiver
-8081 - walsender
-8082 - walwriter
+walreceiver - 8080
+walsender - 8081
+walwriter - 8082
+bgwriter - port + 3000
+checkpointer - port + 3100
+autovacuum - port + 3200
 
 доступны для теста эндпоинты 
 
 /status - просто заглушка
-/info - выводит порт и тип процесса (числом)
+/info - выводит порт и тип процесса
 /lsn - показывает replay_lsn

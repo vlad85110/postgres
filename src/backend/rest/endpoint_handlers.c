@@ -29,6 +29,7 @@ handle_info(const char *method, const char *body, void *user_data,
                     int *status_code, const char **status_text, const char **content_type)
 {
     static char result[128];
-    snprintf(result, sizeof(result), "{\"process\": \"%d\", \"port\": %d}\n", MyBackendType, port);
+    const char *proc_name = get_process_name(MyBackendType);
+    snprintf(result, sizeof(result), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, port);
     return result;
 }
