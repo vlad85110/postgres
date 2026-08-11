@@ -228,7 +228,7 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 	int			rc;
 	WaitEvent	event;
 	int max_events = 3;
-	if (enable_rest_server)
+	if (rest_enabled_for_process(MyBackendType))
 	{
 		max_events++;
 	}
@@ -265,7 +265,7 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 		AddWaitEventToSet(set, ev, sock, NULL, NULL);
 	}
 
-	if (enable_rest_server && server_socket >= 0)
+	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
 	{
 		AddWaitEventToSet(set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
 	}

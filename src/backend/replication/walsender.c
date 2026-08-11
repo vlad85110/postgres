@@ -2841,6 +2841,13 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	register_endpoint("/status", handle_status, NULL);
 	register_endpoint("/info", handle_info, NULL);
 
+	rest_init(MyBackendType);
+
+	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
+	{
+		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+	}
+
 	/*
 	 * Loop until we reach the end of this timeline or the client requests to
 	 * stop streaming.

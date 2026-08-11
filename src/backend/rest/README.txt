@@ -1,8 +1,7 @@
 сейчас сервер выкл
 
-можно включить в rest_server.c исправив на true
-enable_rest_server = false;
-(временное решение)
+можно включить в postgresql.conf
+rest_include_process = 'walreceiver, walsender'
 
 запрос на порт 
 

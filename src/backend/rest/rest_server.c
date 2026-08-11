@@ -14,7 +14,7 @@
 #define MAX_ENDPOINTS 100
 #define MAX_CLIENTS 20
 
-bool enable_rest_server = false;
+char *rest_include_processes = NULL;
 
 static Endpoint endpoints[MAX_ENDPOINTS];
 static Client clients[MAX_CLIENTS];
@@ -27,6 +27,63 @@ int server_socket = -1;
 int port = -1;
 
 static bool need_recreate = false;
+
+static const char *
+get_process_name(int child_type)
+{
+    switch (child_type)
+    {
+        case B_WAL_RECEIVER:   return "walreceiver";
+        case B_WAL_SENDER:     return "walsender";
+        default:               return "unknown";
+    }
+}
+
+bool
+rest_enabled_for_process(int child_type)
+{
+    if (rest_include_processes == NULL || rest_include_processes[0] == '\0')
+    {
+        return false;
+    }
+
+    const char *proc_name = get_process_name(child_type);
+
+    if (proc_name == NULL)
+    {
+        return false;
+    }
+
+    char *list = palloc(strlen(rest_include_processes) + 1);
+    strcpy(list, rest_include_processes);
+    char *token = strtok(list, ",");
+    bool found = false;
+
+    while (token != NULL)
+    {
+        while (*token == ' ')
+        {
+            token++;
+        }
+
+        char *end = token + strlen(token) - 1;
+        while (end > token && *end == ' ')
+        {
+            end--;
+        }
+        *(end + 1) = '\0';
+
+        if (strcmp(token, proc_name) == 0)
+        {
+            found = true;
+            break;
+        }
+        token = strtok(NULL, ",");
+    }
+
+    pfree(list);
+    return found;
+}
 
 void
 register_endpoint(const char *url, endpoint_handler handler, void *user_data)
@@ -43,18 +100,10 @@ register_endpoint(const char *url, endpoint_handler handler, void *user_data)
 static int
 rest_port(int child_type)
 {
-    if (am_walsender)
-    {
-        return 8081;
-    }
-    
     switch(child_type)
     {
         case B_WAL_RECEIVER: return 8080;
-        //case B_BACKEND: return 8100 + (getpid() % 100);
-        //case B_STARTUP: return 8100 + (getpid() % 100);
-        //case B_CHECKPOINTER: return 8100 + (getpid() % 100);
-        //case B_AUTOVAC_LAUNCHER: return 8100 + (getpid() % 100);
+        case B_WAL_SENDER: return 8081;
         default: return -1;
     }
 }
@@ -62,7 +111,7 @@ rest_port(int child_type)
 void
 rest_init(int child_type)
 {
-    if (!enable_rest_server)
+    if (!rest_enabled_for_process(child_type))
     {
         return;
     }

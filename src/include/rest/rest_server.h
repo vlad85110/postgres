@@ -11,7 +11,7 @@ typedef struct
 {
     const char *url;
     endpoint_handler handler;
-    void *user_data
+    void *user_data;
 
 } Endpoint;
 
@@ -32,7 +32,8 @@ typedef struct
 extern void rest_init(int child_type);
 extern void register_endpoint(const char *url, endpoint_handler handler, void *user_data);
 extern void rest_server_poll(void);
+extern char *rest_include_processes;
+extern bool rest_enabled_for_process(int child_type);
 extern int server_socket;
-extern bool enable_rest_server;
 
 #endif
