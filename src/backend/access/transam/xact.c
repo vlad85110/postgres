@@ -1790,11 +1790,12 @@ RecordTransactionAbort(bool isSubXact)
 		nchildren = xactGetCommittedChildren(&children);
 		TransactionIdAbortTree(xid, nchildren, children);
 
+		latestXid = xid;
 		if (!isSubXact)
 			XactLastRecEnd = 0;
 
 		ereport(LOG, errmsg("RecordTransactionAbort: FINISH"));
-		return xid; //пока непонятно что с дочерними транзакциями
+		return latestXid; //пока непонятно что с дочерними транзакциями
 	}
 
 	/*
