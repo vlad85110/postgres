@@ -1,4 +1,7 @@
 #include "rest/rest_server.h"
+
+#include <errno.h>
+
 #include "storage/waiteventset.h"
 #include "utils/memutils.h"
 #include <sys/socket.h>
@@ -7,6 +10,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <asm-generic/errno.h>
+
 #include "miscadmin.h"
 #include "replication/walsender.h"
 #include "utils/guc.h"
@@ -14,7 +19,7 @@
 #define MAX_ENDPOINTS 100
 #define MAX_CLIENTS 20
 
-bool enable_rest_server = false;
+bool enable_rest_server = true;
 
 static Endpoint endpoints[MAX_ENDPOINTS];
 static Client clients[MAX_CLIENTS];
@@ -67,9 +72,10 @@ rest_init(int child_type)
         return;
     }
 
-    //elog(LOG, "rest: am_walsender=%d, MyBackendType=%d", am_walsender, MyBackendType);
+    ereport(LOG, errmsg_internal("rest: am_walsender=%d, MyBackendType=%d", am_walsender, MyBackendType));
+
     port = rest_port(child_type);
-    //elog(LOG, "rest: port=%d", port);
+    ereport(LOG, errmsg_internal("rest: port=%d", port));
 
     if (port == -1)
     {
@@ -347,7 +353,7 @@ rest_server_poll(void)
 
     WaitEvent events[MAX_CLIENTS + 1];
 
-    int number_of_fd = WaitEventSetWait(event_set, 0, &events, MAX_CLIENTS + 1, 0);
+    int number_of_fd = WaitEventSetWait(event_set, 0, events, MAX_CLIENTS + 1, 0);
 
     for (int i = 0; i < number_of_fd; i++)
     {

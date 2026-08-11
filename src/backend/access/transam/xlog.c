@@ -100,7 +100,7 @@
 #include "utils/ps_status.h"
 #include "utils/relmapper.h"
 #include "utils/snapmgr.h"
-#include "utils/stand_delay_setter.h"
+#include "../../../include/stand/stand_delay_setter.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
@@ -8769,7 +8769,7 @@ issue_xlog_fsync(int fd, XLogSegNo segno, TimeLineID tli)
 	start = pgstat_prepare_io_time(track_wal_io_timing);
 	// INSTR_TIME_SET_CURRENT(flush_start);
 
-	pg_usleep(FlushDelay * 1000); // Flush Wait Timeout
+	pg_usleep(ssd->FlushDelay * 1000); // Flush Wait Timeout
 
 	pgstat_report_wait_start(WAIT_EVENT_WAL_SYNC);
 	switch (wal_sync_method)

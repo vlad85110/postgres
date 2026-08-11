@@ -11,7 +11,7 @@ typedef struct
 {
     const char *url;
     endpoint_handler handler;
-    void *user_data
+    void *user_data;
 
 } Endpoint;
 

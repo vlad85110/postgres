@@ -1,0 +1,10 @@
+//
+// Created by borus on 11.08.2026.
+//
+
+#ifndef POSTGRES_STAND_HANDLERS_H
+#define POSTGRES_STAND_HANDLERS_H
+
+
+
+#endif //POSTGRES_STAND_HANDLERS_H

@@ -142,6 +142,7 @@ header_subdirs = [
   'replication',
   'rewrite',
   'statistics',
+  'stand',
   'storage',
   'tcop',
   'snowball',

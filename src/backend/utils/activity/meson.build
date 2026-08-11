@@ -18,7 +18,6 @@ backend_sources += files(
   'pgstat_subscription.c',
   'pgstat_wal.c',
   'pgstat_xact.c',
-  'stand_delay_setter.c',
 )
 
 # this includes a .c file with contents generated in ../../../include/activity,

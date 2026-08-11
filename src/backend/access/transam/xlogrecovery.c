@@ -65,7 +65,7 @@
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
 #include "utils/pg_rusage.h"
-#include "utils/stand_delay_setter.h"
+#include "../../../include/stand/stand_delay_setter.h"
 
 /* Unsupported old recovery command file names (relative to $PGDATA) */
 #define RECOVERY_COMMAND_FILE	"recovery.conf"
@@ -2016,7 +2016,7 @@ ApplyWalRecord(XLogReaderState *xlogreader, XLogRecord *record, TimeLineID *repl
 
 	// INSTR_TIME_SET_CURRENT(start);
 
-	pg_usleep(ApplyDelay * 1000); // Apply Wait Timeout
+	pg_usleep(ssd->ApplyDelay * 1000); // Apply Wait Timeout
 
 	/* Now apply the WAL record itself */
 	GetRmgr(record->xl_rmid).rm_redo(xlogreader);

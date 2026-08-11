@@ -78,7 +78,7 @@
 #include "utils/guc.h"
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
-#include "utils/stand_delay_setter.h"
+#include "../../include/stand/stand_delay_setter.h"
 #include "utils/timestamp.h"
 #include "rest/rest_server.h"
 #include "rest/endpoint_handlers.h"
@@ -1020,7 +1020,7 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 		// INSTR_TIME_SET_CURRENT(write_start); // for delay dashboard
 		pgstat_report_wait_start(WAIT_EVENT_WAL_WRITE);
 
-		pg_usleep(WriteDelay * 1000); // Write Wait Timeout
+		pg_usleep(ssd->WriteDelay * 1000); // Write Wait Timeout
 
 		byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
 		pgstat_report_wait_end();
