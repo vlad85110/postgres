@@ -263,15 +263,15 @@ rest_connection_accept(void)
 }
 
 static bool
-rest_find_endpoint(const char *url, const char *method, const char *body, const char **response_body,
-                    int *status_code, const char **status_text, const char **content_type)
+rest_find_endpoint(const char *url, const char *method, const char *body, Response *response)
 {
+    Request request = {method, url, body, NULL};
     for (int i = 0; i < endpoints_count; i++)
     {
         if (strcmp(url, endpoints[i].url) == 0)
         {
-            *response_body = endpoints[i].handler(method, body, endpoints[i].user_data,
-                                                status_code, status_text, content_type);
+            request.user_data = endpoints[i].user_data;
+            endpoints[i].handler(&request, response);
             return true;
         }
     }
@@ -279,8 +279,7 @@ rest_find_endpoint(const char *url, const char *method, const char *body, const 
 }
 
 static void
-rest_build_response(Client *client, const char *body, int status_code, 
-                    const char *status_text, const char *content_type)
+rest_build_response(Client *client, Response *response)
 {
     snprintf(client->response, sizeof(client->response),
             "HTTP/1.1 %d %s\r\n"
@@ -288,10 +287,10 @@ rest_build_response(Client *client, const char *body, int status_code,
             "Content-Length: %zu\r\n"
             "\r\n"
             "%s",
-            status_code,
-            status_text ? status_text : "Unknown",
-            content_type ? content_type : "text/plain",
-            strlen(body), body);
+            response->status_code,
+            response->status_text,
+            response->content_type,
+            strlen(response->body), response->body);
 
     client->response_len = strlen(client->response);
     client->written = 0;
@@ -330,9 +329,16 @@ rest_handle_request(Client *client, int slot)
     }
 
     char method[16], url[256];
+
+    Response response = {200, "OK", "application/json", ""};
+
     if (sscanf(client->read_buffer, "%15s %255s", method, url) != 2)
     {
-        rest_build_response(client, "Bad request\n", 400, "Bad request", "text/plain");
+        response.status_code = 400;
+        response.status_text = "Bad Request";
+        response.content_type = "text/plain";
+        snprintf(response.body, sizeof(response.body), "Bad Request\n");
+        rest_build_response(client, &response);
         return;
     }
 
@@ -342,19 +348,16 @@ rest_handle_request(Client *client, int slot)
         request_body += 4;
     }
 
-    int status_code = 200;
-    const char *status_text = "OK";
-    const char *content_type = "application/json";
-    const char *response_body = NULL;
-
-    if (rest_find_endpoint(url, method, request_body, &response_body, &status_code, 
-                                                &status_text, &content_type))
+    if (rest_find_endpoint(url, method, request_body, &response))
     {
-        rest_build_response(client, response_body, status_code, status_text, content_type);
+        rest_build_response(client, &response);
     }
 
     else
     {
+        response.status_code = 404;
+        response.status_text = "NotFound";
+        response.content_type = "text/plain";
         const char *error_body = "Invalid request.\n"
                 "Try: \ncurl -X <method> http:/<host>:<port>/<endpoint> -H <headers> -d <body>\n\n"
                 "example:\n"
@@ -362,7 +365,8 @@ rest_handle_request(Client *client, int slot)
                 "-H 'Content-Type: application/json' "
                 "-d '{\"value\": 300}'\n";
 
-        rest_build_response(client, error_body, 404, "Not Found", "text/plain");
+        snprintf(response.body, sizeof(response.body), "%s", error_body);
+        rest_build_response(client, &response);
     }
 }
 

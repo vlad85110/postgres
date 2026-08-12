@@ -7,29 +7,25 @@
 extern XLogRecPtr GetXLogReplayRecPtr(void);
 extern int port;
 
-const char *
-handle_wal_position(const char *method, const char *body, void *user_data,
-                    int *status_code, const char **status_text, const char **content_type)
+void
+handle_wal_position(Request *request, Response *response)
 {
-    static char result[128];
     XLogRecPtr pos = GetXLogReplayRecPtr();
-    snprintf(result, sizeof(result), "{\"wal_lsn\": \"%X/%08X\"}\n", (uint32)(pos >> 32), (uint32)pos);
-    return result;
+    snprintf(response->body, sizeof(response->body), "{\"wal_lsn\": \"%X/%08X\"}\n", (uint32)(pos >> 32), (uint32)pos);
 }
 
-const char *
-handle_status(const char *method, const char *body, void *user_data,
-                    int *status_code, const char **status_text, const char **content_type)
+void
+handle_status(Request *request, Response *response)
 {
-    return "{\"status\": \"ok\"}\n";
+    response->status_code = 200;
+    response->status_text = "ok!";
+    response->content_type = "text/plain";
+    snprintf(response->body, sizeof(response->body), "{\"status\": \"%s\"}\n", response->status_text);
 }
 
-const char *
-handle_info(const char *method, const char *body, void *user_data,
-                    int *status_code, const char **status_text, const char **content_type)
+void
+handle_info(Request *request, Response *response)
 {
-    static char result[128];
     const char *proc_name = get_process_name(MyBackendType);
-    snprintf(result, sizeof(result), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, port);
-    return result;
+    snprintf(response->body, sizeof(response->body), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, port);
 }
