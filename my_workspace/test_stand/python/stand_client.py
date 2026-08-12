@@ -1,107 +1,172 @@
+import requests
+
 from utils.db import DBConnection
 from utils.sql_parser import parse_sql_file
 
 import argparse
 import datetime
 import json
+import os
 import sys
 import time
-import signal
-import os
 
-DEFAULT_SIGNAL_PID = None
+BASE_URL = "http://localhost:8080"
+
+DEFAULT_LIVE_DELAY_WINDOW = "100"
+DEFAULT_LIVE_DELAY_INTERVAL = "300"
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Executes SQL queries and reports duration as JSONL to stdout.")
+	parser = argparse.ArgumentParser()
 
-    parser.add_argument("sql_file", help="path to the SQL file with queries")
-    parser.add_argument("--signal-pid", type=int, default=DEFAULT_SIGNAL_PID,
-                         help="PID of the process to signal during the run")
-    parser.add_argument("--signal-num", type=int, default=signal.SIGUSR2,
-                         help="signal number to send (default: SIGUSR2)")
-    parser.add_argument("--fixed-delay-start-query", type=int, default=None,
-                         help="query number at which the first SIGUSR2 is sent "
-                              "(switches receiver from no-delay to fixed-delay phase)")
-    parser.add_argument("--signal-repeat-every", type=int, default=None,
-                         help="after the fixed-delay phase has started, resend SIGUSR2 "
-                              "every N queries to grow the delay further")
+	parser.add_argument("sql_file", help="path to the SQL file with queries")
 
-    return parser.parse_args()
+	parser.add_argument("--type-delay", type=str, required=True,
+						 choices=["write", "flush", "apply"],
+						 help="type of delay to set (write, flush, apply)")
+	parser.add_argument("--after-queries", type=int, required=True,
+						 help="set the delay once, right after this many queries have run")
+	parser.add_argument("--delay-ms", type=int, required=True,
+						 help="delay value in milliseconds to set after --after-queries queries")
 
-def send_signal(pid, signum, queryNumber):
-    try:
-        os.kill(pid, signum)
-    except (ProcessLookupError, PermissionError, OSError):
-        return None
+	parser.add_argument("--python-path", required=True,
+						 help="path to the python3 interpreter used to exec live_write_delay.py")
+	parser.add_argument("--live-graph-script", required=True,
+						 help="path to live_write_delay.py")
+	parser.add_argument("--window", default=DEFAULT_LIVE_DELAY_WINDOW,
+						 help="number of most recent queries to display on the graph")
+	parser.add_argument("--interval", default=DEFAULT_LIVE_DELAY_INTERVAL,
+						 help="graph refresh interval in milliseconds")
 
-    return {
-        "record_type": "signal",
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        "query_number": queryNumber,
-        "target_pid": pid,
-        "signal_num": signum
-    }
+	return parser.parse_args()
+
+
+def check_file_exists(path: str) -> bool:
+	if not os.path.exists(path):
+		print(f"Error: file not found: {path}", file=sys.stderr)
+		return False
+	return True
+
+
+def spawn_live_graph(python_path: str, live_graph_script: str, window: str, interval: str) -> int:
+	read_fd, write_fd = os.pipe()
+
+	pid = os.fork()
+
+	if pid == 0:
+		os.close(write_fd)
+		os.dup2(read_fd, 0)
+		os.close(read_fd)
+
+		try:
+			os.execv(python_path, [
+				python_path,
+				live_graph_script,
+				"--window", window,
+				"--interval", interval,
+			])
+		except OSError as exc:
+			print(f"Error: execv live_write_delay.py failed: {exc}", file=sys.stderr)
+			os._exit(1)
+
+	os.close(read_fd)
+	os.dup2(write_fd, 1)  # stdout родителя -> write_fd (в pipe, к потомку)
+	os.close(write_fd)
+
+	return pid
+
+
+def set_delay(type_delay: str, ms: int, queryNumber: int):
+	try:
+		response = requests.post(
+			f"{BASE_URL}/set_delay",
+			json={"type_delay": type_delay, "ms": ms}
+		)
+	except requests.exceptions.RequestException:
+		return None
+
+	try:
+		json_response = dict(response.json())
+	except (json.JSONDecodeError, ValueError):
+		return None
+
+	if json_response.get("status") != "ok":
+		return None
+
+	return {
+		"record_type": "change_delay",
+		"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+		"query_number": queryNumber,
+		"type_delay": type_delay,
+		"delay_ms": ms
+	}
+
 
 def main():
-    args = parse_args()
+	args = parse_args()
 
-    queryList = parse_sql_file(args.sql_file)
+	if not check_file_exists(args.python_path) \
+			or not check_file_exists(args.live_graph_script) \
+			or not check_file_exists(args.sql_file):
+		sys.exit(1)
 
-    fixedDelayEntered = False
+	queryList = parse_sql_file(args.sql_file)
 
-    with DBConnection(synchronous_commit="remote_write") as conn:  # коннект по параметрам, указанные в .env
-        curr = conn.cursor()
-        queryNumber = 0
+	child_pid = spawn_live_graph(
+		args.python_path, args.live_graph_script, str(args.window), str(args.interval)
+	)
 
-        for query in queryList:
-            queryNumber += 1
-            begin_time = time.perf_counter_ns()
+	delayAlreadySet = False
 
-            if query["type"] == "statement":
-                curr.execute(query["sql"])
-                conn.commit()
-            elif query["type"] == "transaction":
-                for short_query in query["statements"]:
-                    curr.execute(short_query)
+	with DBConnection(synchronous_commit="remote_write") as conn:  # коннект по параметрам, указанные в .env
+		curr = conn.cursor()
+		queryNumber = 0
 
-            end_time = time.perf_counter_ns()
-            duration_ms = (end_time - begin_time) / 1_000_000  # convert to milliseconds
+		for query in queryList:
+			queryNumber += 1
+			begin_time = time.perf_counter_ns()
 
-            queryRecord = {
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "query_number": queryNumber,
-                "query_type": query["type"],
-                "duration_ms": duration_ms
-            }
+			if query["type"] == "statement":
+				curr.execute(query["sql"])
+				conn.commit()
+			elif query["type"] == "transaction":
+				for short_query in query["statements"]:
+					curr.execute(short_query)
 
-            json.dump(queryRecord, sys.stdout, ensure_ascii=False)
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+			end_time = time.perf_counter_ns()
+			duration_ms = (end_time - begin_time) / 1_000_000  # convert to milliseconds
 
-            shouldEnterFixedDelay = (
-                not fixedDelayEntered
-                and args.fixed_delay_start_query is not None
-                and queryNumber == args.fixed_delay_start_query
-            )
+			queryRecord = {
+				"timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+				"query_number": queryNumber,
+				"query_type": query["type"],
+				"duration_ms": duration_ms
+			}
 
-            shouldGrowDelay = (
-                fixedDelayEntered
-                and args.signal_repeat_every
-                and (queryNumber - args.fixed_delay_start_query) % args.signal_repeat_every == 0
-            )
+			json.dump(queryRecord, sys.stdout, ensure_ascii=False)
+			sys.stdout.write("\n")
+			sys.stdout.flush()
 
-            if shouldEnterFixedDelay:
-                fixedDelayEntered = True
-                signalRecord = send_signal(args.signal_pid, args.signal_num, queryNumber)
-            elif shouldGrowDelay:
-                signalRecord = send_signal(args.signal_pid, args.signal_num, queryNumber)
-            else:
-                signalRecord = None
+			shouldSetDelay = (
+				not delayAlreadySet
+				and queryNumber >= args.after_queries
+			)
 
-            if signalRecord is not None:
-                json.dump(signalRecord, sys.stdout, ensure_ascii=False)
-                sys.stdout.write("\n")
-                sys.stdout.flush()
+			if shouldSetDelay:
+				requestRecord = set_delay(args.type_delay, args.delay_ms, queryNumber)
+				if requestRecord is not None:
+					delayAlreadySet = True
+			else:
+				requestRecord = None
+
+			if requestRecord is not None:
+				json.dump(requestRecord, sys.stdout, ensure_ascii=False)
+				sys.stdout.write("\n")
+				sys.stdout.flush()
+
+	os.close(1)
+	os.waitpid(child_pid, 0)
+
 
 if __name__ == "__main__":
-    main()
+	main()
