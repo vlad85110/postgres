@@ -32,7 +32,7 @@ def main():
 	durations_ms = deque(maxlen=window)
 	queryNumbers = deque(maxlen=window)
 	timestamps = deque(maxlen=window)
-	signalQueryNumbers = []
+	delayChanges = []  # list of (query_number, type_delay, delay_ms)
 
 	fig, ax = plt.subplots(figsize=(10, 5))
 	line, = ax.plot([], [], marker="o", markersize=3, linewidth=1,
@@ -96,8 +96,12 @@ def main():
 
 			recordType = logRecord.get("record_type", "query")
 
-			if recordType == "signal":
-				signalQueryNumbers.append(logRecord.get("query_number"))
+			if recordType == "change_delay":
+				delayChanges.append((
+					logRecord.get("query_number"),
+					logRecord.get("type_delay", "?"),
+					logRecord.get("delay_ms", "?"),
+				))
 				continue
 
 			if "duration_ms" not in logRecord:
@@ -123,12 +127,36 @@ def main():
 		for axvLine in ax.lines[1:]:
 			axvLine.remove()
 
-		for signalQueryNumber in signalQueryNumbers:
-			if signalQueryNumber is not None and signalQueryNumber >= min(queryNumbers, default=0):
-				ax.axvline(x=signalQueryNumber, color="red", linestyle="--", linewidth=1)
+		for artist in list(ax.texts):
+			artist.remove()
+
+		minQuery = min(queryNumbers, default=0)
+
+		for queryNumber, typeDelay, delayMs in delayChanges:
+			if queryNumber is None or queryNumber < minQuery:
+				continue
+
+			ax.axvline(x=queryNumber, color="red", linestyle="--", linewidth=1)
+			ax.annotate(
+				f"{typeDelay}={delayMs}ms",
+				xy=(queryNumber, yMax),
+				xytext=(2, -10),
+				textcoords="offset points",
+				rotation=90,
+				va="top",
+				fontsize=7,
+				color="red",
+			)
+
+		latestChange = delayChanges[-1] if delayChanges else None
+		changeSuffix = (
+			f", last change: {latestChange[1]}={latestChange[2]}ms @q{latestChange[0]}"
+			if latestChange is not None
+			else ""
+		)
 
 		ax.set_title(
-			f"Query duration (last {window} queries, latest: {timestamps[-1]})"
+			f"Query duration (last {window} queries, latest: {timestamps[-1]}{changeSuffix})"
 		)
 
 		return line,
