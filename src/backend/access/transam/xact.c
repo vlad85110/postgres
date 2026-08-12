@@ -1335,7 +1335,7 @@ RecordTransactionCommit(void)
 
 		TransactionIdCommitTree(xid, nchildren, children);
 
-		latestXid = xid;   //пока что дочерние транзакции не обрабатываются нормально
+		latestXid = TransactionIdLatest(xid, nchildren, children);
 
 		XactLastCommitEnd = XactLastRecEnd;
 		XactLastRecEnd = 0;
@@ -1790,7 +1790,7 @@ RecordTransactionAbort(bool isSubXact)
 		nchildren = xactGetCommittedChildren(&children);
 		TransactionIdAbortTree(xid, nchildren, children);
 
-		latestXid = xid;
+		latestXid = TransactionIdLatest(xid, nchildren, children);
 		if (!isSubXact)
 			XactLastRecEnd = 0;
 
