@@ -64,6 +64,8 @@
 #include "utils/guc.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "rest/endpoint_handlers.h"
+#include "rest/rest_server.h"
 
 
 /*----------
@@ -365,6 +367,9 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 		AbsorbSyncRequests();
 
 		ProcessCheckpointerInterrupts();
+
+		rest_server_poll();
+
 		if (ShutdownXLOGPending || ShutdownRequestPending)
 			break;
 
