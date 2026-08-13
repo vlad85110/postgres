@@ -35,10 +35,6 @@ DOLLAR_TAG_RE = re.compile(r'\$([A-Za-z_][A-Za-z0-9_]*)?\$')
 
 
 def split_sql_statements(sql_text: str) -> List[str]:
-    """
-    Разбивает сырой SQL-текст на список отдельных statements по символу ';',
-    игнорируя ';' внутри строковых литералов, dollar-quoted блоков и комментариев.
-    """
     statements = []
     current = []
     i = 0
@@ -149,7 +145,7 @@ def split_sql_statements(sql_text: str) -> List[str]:
     return statements
 
 
-def _strip_leading_comments(stmt: str) -> str:
+def strip_leading_comments(stmt: str) -> str:
     s = stmt
     changed = True
     while changed:
@@ -175,7 +171,7 @@ def group_into_blocks(statements: List[str]) -> List[Dict[str, Any]]:
     current_txn = None
 
     for raw in statements:
-        core = _strip_leading_comments(raw)
+        core = strip_leading_comments(raw)
         if not core:
             continue
 
@@ -216,15 +212,3 @@ def parse_sql_text(sql_text: str) -> List[Dict[str, Any]]:
 def parse_sql_file(path: str) -> List[Dict[str, Any]]:
     with open(path, "r", encoding="utf-8") as f:
         return parse_sql_text(f.read())
-
-
-if __name__ == "__main__":
-    import json
-    import sys
-
-    if len(sys.argv) != 2:
-        print("Использование: python sql_parser.py <path_to.sql>")
-        sys.exit(1)
-
-    result = parse_sql_file(sys.argv[1])
-    print(json.dumps(result, indent=2, ensure_ascii=False))
