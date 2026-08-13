@@ -1327,7 +1327,22 @@ RecordTransactionCommit(void)
 	SharedInvalidationMessage *invalMessages = NULL;
 	bool		RelcacheInitFileInval = false;
 	bool		wrote_xlog;
+	
+	if (RecoveryInProgress() && allow_ext_update_on_standby)
+	{
 
+		nchildren = xactGetCommittedChildren(&children);
+
+		TransactionIdCommitTree(xid, nchildren, children);
+
+		latestXid = TransactionIdLatest(xid, nchildren, children);
+
+		XactLastCommitEnd = XactLastRecEnd;
+		XactLastRecEnd = 0;
+
+		ereport(LOG, errmsg("RecordTransactionCommit: FINISH"));
+		return latestXid;
+	}
 	/*
 	 * Log pending invalidations for logical decoding of in-progress
 	 * transactions.  Normally for DDLs, we log this at each command end,
@@ -1764,6 +1779,25 @@ RecordTransactionAbort(bool isSubXact)
 	TimestampTz xact_time;
 	bool		replorigin;
 
+	ereport(LOG, errmsg("RecordTransactionAbort: START"));
+	if (RecoveryInProgress() && allow_ext_update_on_standby){
+		if (!TransactionIdIsValid(xid))
+		{
+			if (!isSubXact)
+				XactLastRecEnd = 0;
+			return InvalidTransactionId;
+		}
+		nchildren = xactGetCommittedChildren(&children);
+		TransactionIdAbortTree(xid, nchildren, children);
+
+		latestXid = TransactionIdLatest(xid, nchildren, children);
+		if (!isSubXact)
+			XactLastRecEnd = 0;
+
+		ereport(LOG, errmsg("RecordTransactionAbort: FINISH"));
+		return latestXid; //пока непонятно что с дочерними транзакциями
+	}
+
 	/*
 	 * If we haven't been assigned an XID, nobody will care whether we aborted
 	 * or not.  Hence, we're done in that case.  It does not matter if we have
@@ -1874,6 +1908,7 @@ RecordTransactionAbort(bool isSubXact)
 	if (ndroppedstats)
 		pfree(droppedstats);
 
+	ereport(LOG, errmsg("RecordTransactionAbort: FINISH"));
 	return latestXid;
 }
 
@@ -2231,6 +2266,8 @@ CommitTransaction(void)
 	TransactionId latestXid;
 	bool		is_parallel_worker;
 
+	ereport(LOG, errmsg("CommitTransaction: START"));
+
 	is_parallel_worker = (s->blockState == TBLOCK_PARALLEL_INPROGRESS);
 
 	/* Enforce parallel mode restrictions during parallel worker commit. */
@@ -2503,6 +2540,7 @@ CommitTransaction(void)
 	s->state = TRANS_DEFAULT;
 
 	RESUME_INTERRUPTS();
+	ereport(LOG, errmsg("CommitTransaction: FINISH"));
 }
 
 
@@ -2808,6 +2846,7 @@ PrepareTransaction(void)
 static void
 AbortTransaction(void)
 {
+	ereport(LOG, errmsg("AbortTransaction: START"));
 	TransactionState s = CurrentTransactionState;
 	TransactionId latestXid;
 	bool		is_parallel_worker;
@@ -3000,6 +3039,7 @@ AbortTransaction(void)
 	 * State remains TRANS_ABORT until CleanupTransaction().
 	 */
 	RESUME_INTERRUPTS();
+	ereport(LOG, errmsg("AbortTransaction: FINISH"));
 }
 
 /*
@@ -3156,6 +3196,7 @@ RestoreTransactionCharacteristics(const SavedTransactionCharacteristics *s)
 void
 CommitTransactionCommand(void)
 {
+	ereport(LOG, errmsg("CommitTransactionCommand: START"));
 	/*
 	 * Repeatedly call CommitTransactionCommandInternal() until all the work
 	 * is done.
@@ -3163,6 +3204,7 @@ CommitTransactionCommand(void)
 	while (!CommitTransactionCommandInternal())
 	{
 	}
+	ereport(LOG, errmsg("CommitTransactionCommand: FINISH"));
 }
 
 /*
@@ -3176,6 +3218,7 @@ CommitTransactionCommandInternal(void)
 {
 	TransactionState s = CurrentTransactionState;
 	SavedTransactionCharacteristics savetc;
+	ereport(LOG, errmsg("CommitTransactionCommandInternal: START"));
 
 	/* Must save in case we need to restore below */
 	SaveTransactionCharacteristics(&savetc);
@@ -3438,6 +3481,7 @@ CommitTransactionCommandInternal(void)
 			break;
 	}
 
+	ereport(LOG, errmsg("CommitTransactionCommandInternal: FINISH"));
 	/* Done, no more iterations required */
 	return true;
 }

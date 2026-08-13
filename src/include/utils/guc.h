@@ -263,6 +263,9 @@ extern PGDLLIMPORT bool log_statement_stats;
 extern PGDLLIMPORT bool log_btree_build_stats;
 extern PGDLLIMPORT char *event_source;
 
+/* Custom GUC variables */
+extern PGDLLIMPORT bool allow_ext_update_on_standby;
+
 extern PGDLLIMPORT bool check_function_bodies;
 extern PGDLLIMPORT bool current_role_is_superuser;
 

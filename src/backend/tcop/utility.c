@@ -138,7 +138,6 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_AlterEnumStmt:
 		case T_AlterEventTrigStmt:
 		case T_AlterExtensionContentsStmt:
-		case T_AlterExtensionStmt:
 		case T_AlterFdwStmt:
 		case T_AlterForeignServerStmt:
 		case T_AlterFunctionStmt:
@@ -173,7 +172,6 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_CreateFdwStmt:
 		case T_CreateForeignServerStmt:
 		case T_CreateForeignTableStmt:
-		case T_CreateFunctionStmt:
 		case T_CreateOpClassStmt:
 		case T_CreateOpFamilyStmt:
 		case T_CreatePLangStmt:
@@ -195,7 +193,6 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_DefineStmt:
 		case T_DropOwnedStmt:
 		case T_DropRoleStmt:
-		case T_DropStmt:
 		case T_DropSubscriptionStmt:
 		case T_DropTableSpaceStmt:
 		case T_DropUserMappingStmt:
@@ -213,6 +210,16 @@ ClassifyUtilityCommandAsReadOnly(Node *parsetree)
 		case T_ViewStmt:
 			{
 				/* DDL is not read-only, and neither is TRUNCATE. */
+				return COMMAND_IS_NOT_READ_ONLY;
+			}
+
+		case T_AlterExtensionStmt:
+		case T_CreateFunctionStmt:
+		case T_DropStmt:
+			{
+				if (allow_ext_update_on_standby){
+					return COMMAND_IS_NOT_READ_ONLY | COMMAND_OK_IN_RECOVERY | COMMAND_OK_IN_READ_ONLY_TXN;
+				}
 				return COMMAND_IS_NOT_READ_ONLY;
 			}
 
@@ -505,6 +512,7 @@ ProcessUtility(PlannedStmt *pstmt,
 			   DestReceiver *dest,
 			   QueryCompletion *qc)
 {
+	ereport(LOG, errmsg("ProcessUtility: START"));
 	Assert(IsA(pstmt, PlannedStmt));
 	Assert(pstmt->commandType == CMD_UTILITY);
 	Assert(queryString != NULL);	/* required as of 8.4 */
@@ -523,6 +531,7 @@ ProcessUtility(PlannedStmt *pstmt,
 		standard_ProcessUtility(pstmt, queryString, readOnlyTree,
 								context, params, queryEnv,
 								dest, qc);
+	ereport(LOG, errmsg("ProcessUtility: FINISH"));
 }
 
 /*
@@ -555,6 +564,7 @@ standard_ProcessUtility(PlannedStmt *pstmt,
 	ParseState *pstate;
 	int			readonly_flags;
 
+	ereport(LOG, errmsg("standard_ProcessUtility: START"));
 	/* This can recurse, so check for excessive recursion */
 	check_stack_depth();
 
@@ -1081,6 +1091,7 @@ standard_ProcessUtility(PlannedStmt *pstmt,
 	 * #15631).
 	 */
 	CommandCounterIncrement();
+	ereport(LOG, errmsg("standard_ProcessUtility: FINISH"));
 }
 
 /*

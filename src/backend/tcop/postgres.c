@@ -1020,6 +1020,7 @@ exec_simple_query(const char *query_string)
 	bool		use_implicit_block;
 	char		msec_str[32];
 
+	ereport(LOG, errmsg("exec_simple_query: START"));
 	/*
 	 * Report query to various monitoring facilities.
 	 */
@@ -1379,6 +1380,7 @@ exec_simple_query(const char *query_string)
 	TRACE_POSTGRESQL_QUERY_DONE(query_string);
 
 	debug_query_string = NULL;
+	ereport(LOG, errmsg("exec_simple_query: FINISH"));
 }
 
 /*
@@ -2224,6 +2226,7 @@ exec_execute_message(const char *portal_name, long max_rows)
 	 */
 	execute_is_fetch = !portal->atStart;
 
+
 	/* Log immediately if dictated by log_statement */
 	if (check_log_statement(portal->stmts))
 	{
@@ -2825,6 +2828,7 @@ start_xact_command(void)
 static void
 finish_xact_command(void)
 {
+	ereport(LOG, errmsg("finish_xact_command: START"));
 	/* cancel active statement timeout after each command */
 	disable_statement_timeout();
 
@@ -2845,6 +2849,7 @@ finish_xact_command(void)
 
 		xact_started = false;
 	}
+	ereport(LOG, errmsg("finish_xact_command: FINISH"));
 }
 
 

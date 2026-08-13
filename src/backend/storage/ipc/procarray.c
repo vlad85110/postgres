@@ -64,6 +64,7 @@
 #include "utils/builtins.h"
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
+#include "utils/guc.h"
 
 #define UINT32_ACCESS_ONCE(var)		 ((uint32)(*((volatile uint32 *)&(var))))
 
@@ -969,7 +970,10 @@ MaintainLatestCompletedXid(TransactionId latestXid)
 	FullTransactionId cur_latest = TransamVariables->latestCompletedXid;
 
 	Assert(FullTransactionIdIsValid(cur_latest));
-	Assert(!RecoveryInProgress());
+
+	if (!(RecoveryInProgress() && allow_ext_update_on_standby))
+        Assert(!RecoveryInProgress());
+
 	Assert(LWLockHeldByMe(ProcArrayLock));
 
 	if (TransactionIdPrecedes(XidFromFullTransactionId(cur_latest), latestXid))
@@ -979,7 +983,7 @@ MaintainLatestCompletedXid(TransactionId latestXid)
 	}
 
 	Assert(IsBootstrapProcessingMode() ||
-		   FullTransactionIdIsNormal(TransamVariables->latestCompletedXid));
+		FullTransactionIdIsNormal(TransamVariables->latestCompletedXid));
 }
 
 /*
