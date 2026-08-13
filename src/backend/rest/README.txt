@@ -1,7 +1,7 @@
 сейчас сервер выкл
 
 можно включить в postgresql.conf
-rest_include_process = 'walreceiver, walsender'
+rest_include_processes = 'walreceiver, walsender'
 
 запрос на порт (*port = порт, на котором запущен постгрес)
 
