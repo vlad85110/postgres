@@ -277,6 +277,11 @@ postmaster_child_launch(BackendType child_type, int child_slot,
 		 */
 		MemoryContextSwitchTo(TopMemoryContext);
 
+		if (child_type != B_BACKEND)
+		{
+			rest_init(child_type);
+		}
+
 		MyPMChildSlot = child_slot;
 		if (client_sock)
 		{
