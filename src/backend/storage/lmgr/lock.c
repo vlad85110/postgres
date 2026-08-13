@@ -47,6 +47,7 @@
 #include "utils/memutils.h"
 #include "utils/ps_status.h"
 #include "utils/resowner.h"
+#include "utils/guc.h"
 
 
 /* GUC variables */
@@ -863,7 +864,7 @@ LockAcquireExtended(const LOCKTAG *locktag,
 	if (RecoveryInProgress() && !InRecovery &&
 		(locktag->locktag_type == LOCKTAG_OBJECT ||
 		 locktag->locktag_type == LOCKTAG_RELATION) &&
-		lockmode > RowExclusiveLock)
+		lockmode > RowExclusiveLock && !allow_ext_update_on_standby)
 		ereport(ERROR,
 				(errcode(ERRCODE_OBJECT_NOT_IN_PREREQUISITE_STATE),
 				 errmsg("cannot acquire lock mode %s on database objects while recovery is in progress",

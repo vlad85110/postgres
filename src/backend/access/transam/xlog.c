@@ -8069,6 +8069,11 @@ KeepLogSeg(XLogRecPtr recptr, XLogSegNo *logSegNo)
 void
 XLogPutNextOid(Oid nextOid)
 {
+	if (RecoveryInProgress() && allow_ext_update_on_standby)
+    {
+        ereport(LOG, errmsg("XLogPutNextOid: skipped record"));
+        return;
+    }
 	XLogBeginInsert();
 	XLogRegisterData(&nextOid, sizeof(Oid));
 	(void) XLogInsert(RM_XLOG_ID, XLOG_NEXTOID);

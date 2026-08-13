@@ -608,8 +608,8 @@ ProcedureCreate(const char *procedureName,
 		CatalogTupleInsert(rel, tup);
 		is_update = false;
 	}
-
-
+	
+	
 	retval = ((Form_pg_proc) GETSTRUCT(tup))->oid;
 
 	/*

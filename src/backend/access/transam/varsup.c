@@ -558,7 +558,7 @@ GetNewObjectId(void)
 	Oid			result;
 
 	/* safety check, we should never get this far in a HS standby */
-	if (RecoveryInProgress())
+	if (RecoveryInProgress() && !allow_ext_update_on_standby)
 		elog(ERROR, "cannot assign OIDs during recovery");
 
 	LWLockAcquire(OidGenLock, LW_EXCLUSIVE);
