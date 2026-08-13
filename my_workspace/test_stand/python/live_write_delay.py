@@ -4,60 +4,79 @@ import json
 import os
 import sys
 from collections import deque
+from dataclasses import dataclass
+from typing import List, Optional, Union
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
-DEFAULT_WINDOW = 1000
+DEFAULT_WINDOW = 100
 DEFAULT_INTERVAL = 300
 READ_CHUNK_SIZE = 65536
 
-def parse_args():
-	parser = argparse.ArgumentParser(description="Live plot of query durations read as JSONL from stdin.")
-	parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
-						 help="number of most recent queries to display")
-	parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL,
-						 help="chart refresh interval in milliseconds")
-	return parser.parse_args()
 
-def main():
-	args = parse_args()
-	window = args.window
+def parse_args(argv: Optional[List[str]]):
+		parser = argparse.ArgumentParser(
+			description="Live plot of query durations read as JSONL from stdin."
+		)
+		parser.add_argument("--window", type=int, default=DEFAULT_WINDOW,
+							 help="number of most recent queries to display")
+		parser.add_argument("--interval", type=int, default=DEFAULT_INTERVAL,
+							 help="chart refresh interval in milliseconds")
+		return parser.parse_args(argv)
 
-	stdin_fd = sys.stdin.fileno()
-	os.set_blocking(stdin_fd, False)
-	pending_bytes = b""
 
-	durations_ms = deque(maxlen=window)
-	queryNumbers = deque(maxlen=window)
-	timestamps = deque(maxlen=window)
-	delayChanges = []  # list of (query_number, type_delay, delay_ms)
+@dataclass
+class DelayChangeEvent:
+	query_number: int
+	type_delay: str
+	delay_ms: Union[int, float, str]
 
-	fig, ax = plt.subplots(figsize=(10, 5))
-	line, = ax.plot([], [], marker="o", markersize=3, linewidth=1,
-					 color="#1f77b4")
+# TODO: убрать Singleton и нормально по-человечески разбить на классы
+class LiveUpdatedGraph:
 
-	ax.set_xlabel("query number")
-	ax.set_ylabel("duration (ms)")
-	ax.grid(True, alpha=0.3)
-	ax.set_title("Query duration")
-	ax.set_xlim(left=0)
-	ax.set_ylim(bottom=0)
-	ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+	def __init__(self, argv: Optional[List[str]] = None):
+		self.args = parse_args(argv)
+		self.window = self.args.window
+		self.interval_ms = self.args.interval
 
-	def read_available_lines():
-		"""
-		Reads all currently available bytes from the non-blocking stdin fd
-		using raw os.read(), so a partial read never raises/loses data the
-		way BufferedReader/TextIOWrapper.readlines() can on non-blocking fds.
-		"""
-		nonlocal pending_bytes
+		# --- состояние чтения stdin ---
+		self.stdin_fd = sys.stdin.fileno()
+		os.set_blocking(self.stdin_fd, False)
+		self.pending_bytes = b""
+
+		# --- накопленные данные для графика ---
+		self.durations_ms = deque(maxlen=self.window)
+		self.query_numbers = deque(maxlen=self.window)
+		self.timestamps = deque(maxlen=self.window)
+		self.delay_changes: List[DelayChangeEvent] = []
+
+		# --- matplotlib ---
+		self.fig, self.ax = plt.subplots(figsize=(10, 5))
+		self.line, = self.ax.plot([], [], marker="o", markersize=3, linewidth=1, color="#1f77b4")
+		self.configure_axes()
+
+		self.animation = animation.FuncAnimation(
+			self.fig, self.update, interval=self.interval_ms, blit=False,
+			cache_frame_data=False
+		)
+
+	def configure_axes(self) -> None:
+		self.ax.set_xlabel("query number")
+		self.ax.set_ylabel("duration (ms)")
+		self.ax.grid(True, alpha=0.3)
+		self.ax.set_title("Query duration")
+		self.ax.set_xlim(left=0)
+		self.ax.set_ylim(bottom=0)
+		self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+	def read_available_lines(self) -> List[str]:
 
 		chunks = []
 		while True:
 			try:
-				chunk = os.read(stdin_fd, READ_CHUNK_SIZE)
+				chunk = os.read(self.stdin_fd, READ_CHUNK_SIZE)
 			except BlockingIOError:
 				break
 			except OSError as exc:
@@ -73,73 +92,56 @@ def main():
 		if not chunks:
 			return []
 
-		pending_bytes += b"".join(chunks)
+		self.pending_bytes += b"".join(chunks)
 
-		*complete_lines, pending_bytes = pending_bytes.split(b"\n")
+		*complete_lines, self.pending_bytes = self.pending_bytes.split(b"\n")
 		return [line_bytes.decode("utf-8", errors="replace") for line_bytes in complete_lines]
 
-	def update(frame):
-		lines = read_available_lines()
+	def ingest_line(self, raw_line: str) -> None:
+		raw_line = raw_line.strip()
+		if not raw_line:
+			return
 
-		if not lines:
-			return line,
+		try:
+			log_record = json.loads(raw_line)
+		except json.JSONDecodeError:
+			return
 
-		for currentLine in lines:
-			currentLine = currentLine.strip()
-			if not currentLine:
-				continue
+		record_type = log_record.get("record_type", "query")
 
-			try:
-				logRecord = json.loads(currentLine)
-			except json.JSONDecodeError:
-				continue
+		if record_type == "change_delay":
+			self.delay_changes.append(DelayChangeEvent(
+				query_number=log_record.get("query_number"),
+				type_delay=log_record.get("type_delay", "?"),
+				delay_ms=log_record.get("delay_ms", "?"),
+			))
+			return
 
-			recordType = logRecord.get("record_type", "query")
+		if "duration_ms" not in log_record:
+			return
 
-			if recordType == "change_delay":
-				delayChanges.append((
-					logRecord.get("query_number"),
-					logRecord.get("type_delay", "?"),
-					logRecord.get("delay_ms", "?"),
-				))
-				continue
+		self.durations_ms.append(log_record["duration_ms"])
+		self.query_numbers.append(log_record.get("query_number", len(self.query_numbers) + 1))
+		self.timestamps.append(log_record.get("timestamp", ""))
 
-			if "duration_ms" not in logRecord:
-				continue
+	def visible_changes(self) -> List[DelayChangeEvent]:
+		min_query = min(self.query_numbers, default=0)
+		return [
+			event for event in self.delay_changes
+			if event.query_number is not None and event.query_number >= min_query
+		]
 
-			durations_ms.append(logRecord["duration_ms"])
-			queryNumbers.append(logRecord.get("query_number", len(queryNumbers) + 1))
-			timestamps.append(logRecord.get("timestamp", ""))
-
-		if not durations_ms:
-			return line,
-
-		line.set_data(list(queryNumbers), list(durations_ms))
-		ax.relim()
-		ax.autoscale_view()
-
-		xMin, xMax = ax.get_xlim()
-		yMin, yMax = ax.get_ylim()
-		ax.set_xlim(left=0, right=max(xMax, 1))
-		ax.set_ylim(bottom=0, top=max(yMax, 1))
-		ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-
-		for axvLine in ax.lines[1:]:
-			axvLine.remove()
-
-		for artist in list(ax.texts):
+	def redraw_delay_markers(self, y_max: float) -> None:
+		for axv_line in self.ax.lines[1:]:
+			axv_line.remove()
+		for artist in list(self.ax.texts):
 			artist.remove()
 
-		minQuery = min(queryNumbers, default=0)
-
-		for queryNumber, typeDelay, delayMs in delayChanges:
-			if queryNumber is None or queryNumber < minQuery:
-				continue
-
-			ax.axvline(x=queryNumber, color="red", linestyle="--", linewidth=1)
-			ax.annotate(
-				f"{typeDelay}={delayMs}ms",
-				xy=(queryNumber, yMax),
+		for event in self.visible_changes():
+			self.ax.axvline(x=event.query_number, color="red", linestyle="--", linewidth=1)
+			self.ax.annotate(
+				f"{event.type_delay}={event.delay_ms}ms",
+				xy=(event.query_number, y_max),
 				xytext=(2, -10),
 				textcoords="offset points",
 				rotation=90,
@@ -148,26 +150,46 @@ def main():
 				color="red",
 			)
 
-		latestChange = delayChanges[-1] if delayChanges else None
-		changeSuffix = (
-			f", last change: {latestChange[1]}={latestChange[2]}ms @q{latestChange[0]}"
-			if latestChange is not None
+	def update_title(self) -> None:
+		latest_change = self.delay_changes[-1] if self.delay_changes else None
+		change_suffix = (
+			f", last change: {latest_change.type_delay}={latest_change.delay_ms}ms @q{latest_change.query_number}"
+			if latest_change is not None
 			else ""
 		)
-
-		ax.set_title(
-			f"Query duration (last {window} queries, latest: {timestamps[-1]}{changeSuffix})"
+		self.ax.set_title(
+			f"Query duration (last {self.window} queries, "
+			f"latest: {self.timestamps[-1]}{change_suffix})"
 		)
 
-		return line,
+	def update(self, frame):
+		lines = self.read_available_lines()
 
-	ani = animation.FuncAnimation(
-		fig, update, interval=args.interval, blit=False,
-		cache_frame_data=False
-	)
+		for raw_line in lines:
+			self.ingest_line(raw_line)
 
-	plt.tight_layout()
-	plt.show()
+		if not self.durations_ms:
+			return self.line,
+
+		self.line.set_data(list(self.query_numbers), list(self.durations_ms))
+		self.ax.relim()
+		self.ax.autoscale_view()
+
+		_, x_max = self.ax.get_xlim()
+		_, y_max = self.ax.get_ylim()
+		self.ax.set_xlim(left=0)
+		self.ax.set_ylim(bottom=0)
+		self.ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+
+		self.redraw_delay_markers(y_max)
+		self.update_title()
+
+		return self.line,
+
+	def run(self) -> None:
+		plt.tight_layout()
+		plt.show()
+
 
 if __name__ == "__main__":
-	main()
+	LiveUpdatedGraph().run()
