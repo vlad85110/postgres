@@ -51,6 +51,8 @@
 #include "utils/memutils.h"
 #include "utils/resowner.h"
 #include "utils/timestamp.h"
+#include "rest/endpoint_handlers.h"
+#include "rest/rest_server.h"
 
 /*
  * GUC parameters
@@ -229,6 +231,8 @@ BackgroundWriterMain(const void *startup_data, size_t startup_data_len)
 		ResetLatch(MyLatch);
 
 		ProcessMainLoopInterrupts();
+
+		rest_server_poll();
 
 		/*
 		 * Do one cycle of dirty-buffer writing.
