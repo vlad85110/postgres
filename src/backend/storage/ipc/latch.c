@@ -27,6 +27,7 @@
 
 /* A common WaitEventSet used to implement WaitLatch() */
 static WaitEventSet *LatchWaitSet;
+static bool rest_added_to_latch = false;
 
 /* The positions of the latch and PM death events in LatchWaitSet */
 #define LatchWaitSetLatchPos 0
@@ -40,7 +41,7 @@ InitializeLatchWaitSet(void)
 	Assert(LatchWaitSet == NULL);
 
 	/* Set up the WaitEventSet used by WaitLatch(). */
-	LatchWaitSet = CreateWaitEventSet(NULL, 2);
+	LatchWaitSet = CreateWaitEventSet(NULL, 3);
 	latch_pos = AddWaitEventToSet(LatchWaitSet, WL_LATCH_SET, PGINVALID_SOCKET,
 								  MyLatch, NULL);
 	Assert(latch_pos == LatchWaitSetLatchPos);
@@ -194,13 +195,25 @@ WaitLatch(Latch *latch, int wakeEvents, long timeout,
 						(wakeEvents & (WL_EXIT_ON_PM_DEATH | WL_POSTMASTER_DEATH)),
 						NULL);
 
+	if (!rest_added_to_latch && server_socket >= 0)
+    {
+        AddWaitEventToSet(LatchWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+        rest_added_to_latch = true;
+    }
+
 	if (WaitEventSetWait(LatchWaitSet,
 						 (wakeEvents & WL_TIMEOUT) ? timeout : -1,
 						 &event, 1,
 						 wait_event_info) == 0)
 		return WL_TIMEOUT;
-	else
+	else 
+	{
+		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
+		{
+			rest_server_poll();
+		}
 		return event.events;
+	}
 }
 
 /*
