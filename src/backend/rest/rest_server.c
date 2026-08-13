@@ -41,7 +41,7 @@ get_process_name(int child_type)
         case B_BG_WRITER:       return "bgwriter";
         case B_CHECKPOINTER:    return "checkpointer";
         case B_AUTOVAC_LAUNCHER:return "autovacuum";
-        default:                return "unknown";
+        default:                return  NULL;
     }
 }
 
