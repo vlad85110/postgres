@@ -52,6 +52,7 @@
 #include "storage/pg_shmem.h"
 #include "tcop/backend_startup.h"
 #include "utils/memutils.h"
+#include "rest/rest_server.h"
 
 #ifdef EXEC_BACKEND
 #include "nodes/queryjumble.h"
