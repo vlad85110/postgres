@@ -9,11 +9,11 @@ rest_include_processes = 'walreceiver, walsender, walwriter,
 запрос на порт (port = порт, на котором запущен постгрес)
 
 walreceiver    port + 1000
-walsender      port + 1001
-walwriter      port + 1002
-bgwriter       port + 1003
-checkpointer   port + 1004
-autovacuum     port + 1005
+walsender      port + 1100
+walwriter      port + 1200
+bgwriter       port + 1300
+checkpointer   port + 1400
+autovacuum     port + 1500
 ----------------------------------------------------------------
 
 доступен для теста эндпоинт
