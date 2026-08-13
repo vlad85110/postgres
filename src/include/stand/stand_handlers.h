@@ -1,11 +1,10 @@
 #ifndef POSTGRES_STAND_HANDLERS_H
 #define POSTGRES_STAND_HANDLERS_H
 
-extern const char *handle_set_delay(const char *method, const char *body, void *user_data,
-                                int *status_code, const char **status_text, const char **content_type);
-extern const char *handle_get_delays(const char *method, const char *body, void *user_data,
-                                int *status_code, const char **status_text, const char **content_type);
-extern const char *handle_change_delay(const char *method, const char *body, void *user_data,
-                                int *status_code, const char **status_text, const char **content_type);
+#include "rest/rest_server.h"
+
+extern void handle_set_delay(Request *request, Response *response);
+extern void handle_get_delays(Request *request, Response *response);
+extern void handle_change_delay(Request *request, Response *response);
 
 #endif //POSTGRES_STAND_HANDLERS_H
