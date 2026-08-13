@@ -62,6 +62,8 @@
 #include "utils/hsearch.h"
 #include "utils/memutils.h"
 #include "utils/resowner.h"
+#include "rest/endpoint_handlers.h"
+#include "rest/rest_server.h"
 
 
 /*
@@ -242,6 +244,8 @@ WalWriterMain(const void *startup_data, size_t startup_data_len)
 
 		/* Process any signals received recently */
 		ProcessMainLoopInterrupts();
+
+		rest_server_poll();
 
 		/*
 		 * Do what we're here for; then, if XLogBackgroundFlush() found useful
