@@ -102,6 +102,7 @@
 #include "utils/ps_status.h"
 #include "utils/rls.h"
 #include "utils/xml.h"
+#include "rest/rest_server.h"
 
 #ifdef TRACE_SYNCSCAN
 #include "access/syncscan.h"
@@ -4993,6 +4994,16 @@ struct config_string ConfigureNamesString[] =
 		check_log_connections, assign_log_connections, NULL
 	},
 
+	{
+		{"rest_include_processes", PGC_POSTMASTER, CUSTOM_OPTIONS,
+			gettext_noop("List of background processes where REST server is enabled."),
+			NULL,
+			GUC_LIST_INPUT
+		},
+		&rest_include_processes,
+		"",
+		NULL, NULL, NULL
+	},
 
 	/* End-of-list marker */
 	{
