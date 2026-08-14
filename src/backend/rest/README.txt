@@ -2,8 +2,7 @@
 
 можно включить в postgresql.conf
 
-rest_include_processes = 'walreceiver, walsender, walwriter,
-                          bgwriter, checkpointer, autovacuum'
+rest_include_processes = 'walreceiver, walsender, walwriter, bgwriter, checkpointer, autovacuum'
 ----------------------------------------------------------------
 
 запрос на порт (port = порт, на котором запущен постгрес)
