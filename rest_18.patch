@@ -1,0 +1,992 @@
+diff --git a/src/backend/Makefile b/src/backend/Makefile
+index c0be9410383..36f960964ad 100644
+--- a/src/backend/Makefile
++++ b/src/backend/Makefile
+@@ -19,7 +19,7 @@ include $(top_builddir)/src/Makefile.global
+ SUBDIRS = access archive backup bootstrap catalog parser commands executor \
+ 	foreign lib libpq \
+ 	main nodes optimizer partitioning port postmaster \
+-	regex replication rewrite \
++	regex replication rest rewrite \
+ 	statistics storage tcop tsearch utils $(top_builddir)/src/timezone \
+ 	jit
+ 
+diff --git a/src/backend/postmaster/autovacuum.c b/src/backend/postmaster/autovacuum.c
+index 66620fb4755..2819dfe9789 100644
+--- a/src/backend/postmaster/autovacuum.c
++++ b/src/backend/postmaster/autovacuum.c
+@@ -110,6 +110,8 @@
+ #include "utils/syscache.h"
+ #include "utils/timeout.h"
+ #include "utils/timestamp.h"
++#include "rest/endpoint_handlers.h"
++#include "rest/rest_server.h"
+ 
+ 
+ /*
+@@ -598,6 +600,8 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
+ 
+ 		ProcessAutoVacLauncherInterrupts();
+ 
++		rest_server_poll();
++
+ 		/*
+ 		 * a worker finished, or postmaster signaled failure to start a worker
+ 		 */
+diff --git a/src/backend/postmaster/bgwriter.c b/src/backend/postmaster/bgwriter.c
+index 72f5acceec7..7dc0b1b26c8 100644
+--- a/src/backend/postmaster/bgwriter.c
++++ b/src/backend/postmaster/bgwriter.c
+@@ -51,6 +51,8 @@
+ #include "utils/memutils.h"
+ #include "utils/resowner.h"
+ #include "utils/timestamp.h"
++#include "rest/endpoint_handlers.h"
++#include "rest/rest_server.h"
+ 
+ /*
+  * GUC parameters
+@@ -230,6 +232,8 @@ BackgroundWriterMain(const void *startup_data, size_t startup_data_len)
+ 
+ 		ProcessMainLoopInterrupts();
+ 
++		rest_server_poll();
++
+ 		/*
+ 		 * Do one cycle of dirty-buffer writing.
+ 		 */
+diff --git a/src/backend/postmaster/checkpointer.c b/src/backend/postmaster/checkpointer.c
+index 3914ac8da26..fcda314d25b 100644
+--- a/src/backend/postmaster/checkpointer.c
++++ b/src/backend/postmaster/checkpointer.c
+@@ -64,6 +64,8 @@
+ #include "utils/guc.h"
+ #include "utils/memutils.h"
+ #include "utils/resowner.h"
++#include "rest/endpoint_handlers.h"
++#include "rest/rest_server.h"
+ 
+ 
+ /*----------
+@@ -365,6 +367,9 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
+ 		AbsorbSyncRequests();
+ 
+ 		ProcessCheckpointerInterrupts();
++
++		rest_server_poll();
++
+ 		if (ShutdownXLOGPending || ShutdownRequestPending)
+ 			break;
+ 
+diff --git a/src/backend/postmaster/launch_backend.c b/src/backend/postmaster/launch_backend.c
+index ae94cc99d31..dde726c37ca 100644
+--- a/src/backend/postmaster/launch_backend.c
++++ b/src/backend/postmaster/launch_backend.c
+@@ -52,6 +52,7 @@
+ #include "storage/pg_shmem.h"
+ #include "tcop/backend_startup.h"
+ #include "utils/memutils.h"
++#include "rest/rest_server.h"
+ 
+ #ifdef EXEC_BACKEND
+ #include "nodes/queryjumble.h"
+@@ -277,6 +278,11 @@ postmaster_child_launch(BackendType child_type, int child_slot,
+ 		 */
+ 		MemoryContextSwitchTo(TopMemoryContext);
+ 
++		if (child_type != B_BACKEND)
++		{
++			rest_init(child_type);
++		}
++
+ 		MyPMChildSlot = child_slot;
+ 		if (client_sock)
+ 		{
+diff --git a/src/backend/postmaster/walwriter.c b/src/backend/postmaster/walwriter.c
+index fd92c8b7a33..d9804d47737 100644
+--- a/src/backend/postmaster/walwriter.c
++++ b/src/backend/postmaster/walwriter.c
+@@ -62,6 +62,8 @@
+ #include "utils/hsearch.h"
+ #include "utils/memutils.h"
+ #include "utils/resowner.h"
++#include "rest/endpoint_handlers.h"
++#include "rest/rest_server.h"
+ 
+ 
+ /*
+@@ -243,6 +245,8 @@ WalWriterMain(const void *startup_data, size_t startup_data_len)
+ 		/* Process any signals received recently */
+ 		ProcessMainLoopInterrupts();
+ 
++		rest_server_poll();
++
+ 		/*
+ 		 * Do what we're here for; then, if XLogBackgroundFlush() found useful
+ 		 * work to do, reset hibernation counter.
+diff --git a/src/backend/replication/walreceiver.c b/src/backend/replication/walreceiver.c
+index 49bf48a3064..ae727d0904c 100644
+--- a/src/backend/replication/walreceiver.c
++++ b/src/backend/replication/walreceiver.c
+@@ -79,6 +79,8 @@
+ #include "utils/pg_lsn.h"
+ #include "utils/ps_status.h"
+ #include "utils/timestamp.h"
++#include "rest/rest_server.h"
++#include "rest/endpoint_handlers.h"
+ 
+ 
+ /*
+@@ -507,6 +509,8 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
+ 				/* Process any requests or signals received recently */
+ 				CHECK_FOR_INTERRUPTS();
+ 
++				rest_server_poll();
++
+ 				if (ConfigReloadPending)
+ 				{
+ 					ConfigReloadPending = false;
+diff --git a/src/backend/replication/walsender.c b/src/backend/replication/walsender.c
+index 47aec4cd2b2..c77e3da656f 100644
+--- a/src/backend/replication/walsender.c
++++ b/src/backend/replication/walsender.c
+@@ -95,6 +95,8 @@
+ #include "utils/ps_status.h"
+ #include "utils/timeout.h"
+ #include "utils/timestamp.h"
++#include "rest/rest_server.h"
++#include "rest/endpoint_handlers.h"
+ 
+ /* Minimum interval used by walsender for stats flushes, in ms */
+ #define WALSENDER_STATS_FLUSH_INTERVAL         1000
+@@ -2836,6 +2838,13 @@ WalSndLoop(WalSndSendDataCallback send_data)
+ 	last_reply_timestamp = GetCurrentTimestamp();
+ 	waiting_for_ping_response = false;
+ 
++	rest_init(MyBackendType);
++
++	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
++	{
++		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
++	}
++
+ 	/*
+ 	 * Loop until we reach the end of this timeline or the client requests to
+ 	 * stop streaming.
+@@ -2847,6 +2856,8 @@ WalSndLoop(WalSndSendDataCallback send_data)
+ 
+ 		CHECK_FOR_INTERRUPTS();
+ 
++		rest_server_poll();
++
+ 		/* Process any requests or signals received recently */
+ 		if (ConfigReloadPending)
+ 		{
+@@ -3807,11 +3818,21 @@ WalSndWait(uint32 socket_events, long timeout, uint32 wait_event)
+ 	else if (MyWalSnd->kind == REPLICATION_KIND_LOGICAL)
+ 		ConditionVariablePrepareToSleep(&WalSndCtl->wal_replay_cv);
+ 
+-	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1 &&
+-		(event.events & WL_POSTMASTER_DEATH))
++	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1)
+ 	{
+-		ConditionVariableCancelSleep();
+-		proc_exit(1);
++		
++		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
++		{
++			ConditionVariableCancelSleep();
++			rest_server_poll();
++		}
++
++		else if (event.events & WL_POSTMASTER_DEATH)
++		{
++			ConditionVariableCancelSleep();
++			proc_exit(1);
++		}
++		
+ 	}
+ 
+ 	ConditionVariableCancelSleep();
+diff --git a/src/backend/rest/Makefile b/src/backend/rest/Makefile
+new file mode 100644
+index 00000000000..8cc482794e9
+--- /dev/null
++++ b/src/backend/rest/Makefile
+@@ -0,0 +1,7 @@
++subdir = src/backend/rest
++top_builddir = ../../..
++include $(top_builddir)/src/Makefile.global
++
++OBJS = rest_server.o endpoint_handlers.o
++
++include $(top_srcdir)/src/backend/common.mk
+\ No newline at end of file
+diff --git a/src/backend/rest/README.txt b/src/backend/rest/README.txt
+new file mode 100644
+index 00000000000..21fd3e59479
+--- /dev/null
++++ b/src/backend/rest/README.txt
+@@ -0,0 +1,65 @@
++сейчас сервер выключен
++
++можно включить в postgresql.conf
++
++rest_include_processes = 'walreceiver, walsender, walwriter,
++                          bgwriter, checkpointer, autovacuum'
++----------------------------------------------------------------
++
++запрос на порт (port = порт, на котором запущен постгрес)
++
++walreceiver    port + 1000
++walsender      port + 1100
++walwriter      port + 1200
++bgwriter       port + 1300
++checkpointer   port + 1400
++autovacuum     port + 1500
++----------------------------------------------------------------
++
++доступен для теста эндпоинт
++/info - выводит порт и тип процесса
++
++эндпоинты необходимо регистировать в main-функции процесса перед основным циклом с помощью функции
++
++register_endpoint(const char *url, endpoint_handler handler, void *user_data), где
++
++url       - сам эндпоинт (например /info)
++handler   - функция-обработчик, которая будет вызвана при отправке запроса с соответствующим эндпоинтом
++user_data - данные, которые можно передать из main-функции процесса в обработчик
++
++примеры регистрации:
++register_endpoint("/info", handle_info, &data);
++register_endpoint("/info", handle_info, NULL);
++----------------------------------------------------------------
++
++свои хендлеры можно писать в файле src/backend/rest/endpoint_handlers.c
++
++хендлеры имеют вид:
++
++handle_info(Request *request, Response *response), где
++
++request содержит:
++method       - GET/POST
++body         - тело запроса
++url          - эндпоинт
++user_data    - данные переданные из main-функции процесса
++
++response содержит:
++status_code  - статус-код HTTP-ответа (с каким статус-кодом должен быть ответ на запрос)
++status_text  - статус-текст HTTP-ответа (с каким статус-текстом должен быть ответ на запрос)
++content-type - тип HTTP-ответа (какого типа должен быть ответ)
++body         - тело ответа (что должно прийти в ответе)
++----------------------------------------------------------------
++
++поддерживаются запросы вида:
++
++curl http://<host>:<port>/<endpoint>
++curl -X GET http://<host>:<port>/<endpoint>
++curl -X POST http://<host>:<port>/<endpoint> -H "Content-Type: <type>" -d '{"<variable>": <value>}'
++
++примеры запросов:
++
++curl http://localhost:8432/info
++curl -X GET http://localhost:8432/info
++curl -X POST http://localhost:8432/set -H "Content-Type: application/json" -d '{"value": 50}'
++----------------------------------------------------------------
+\ No newline at end of file
+diff --git a/src/backend/rest/endpoint_handlers.c b/src/backend/rest/endpoint_handlers.c
+new file mode 100644
+index 00000000000..4e6c23505b5
+--- /dev/null
++++ b/src/backend/rest/endpoint_handlers.c
+@@ -0,0 +1,15 @@
++#include "postgres.h"
++#include "access/xlogdefs.h"
++#include "miscadmin.h"
++#include "rest/endpoint_handlers.h"
++#include <stdio.h>
++
++extern XLogRecPtr GetXLogReplayRecPtr(void);
++extern int port;
++
++void
++handle_info(Request *request, Response *response)
++{
++    const char *proc_name = get_process_name(MyBackendType);
++    snprintf(response->body, sizeof(response->body), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, port);
++}
+\ No newline at end of file
+diff --git a/src/backend/rest/rest_server.c b/src/backend/rest/rest_server.c
+new file mode 100644
+index 00000000000..d8e6f14b2ff
+--- /dev/null
++++ b/src/backend/rest/rest_server.c
+@@ -0,0 +1,440 @@
++#include "rest/rest_server.h"
++#include "storage/waiteventset.h"
++#include "utils/memutils.h"
++#include <sys/socket.h>
++#include <fcntl.h>
++#include <netinet/in.h>
++#include <unistd.h>
++#include <arpa/inet.h>
++#include <string.h>
++#include "miscadmin.h"
++#include "replication/walsender.h"
++#include "utils/guc.h"
++
++#define MAX_ENDPOINTS 100
++#define MAX_CLIENTS 20
++
++char *rest_include_processes = NULL;
++
++extern int PostPortNumber;
++
++static Endpoint endpoints[MAX_ENDPOINTS];
++static Client clients[MAX_CLIENTS];
++
++static int endpoints_count = 0;
++
++WaitEventSet *event_set = NULL;
++
++int server_socket = -1;
++int port = -1;
++
++static bool need_recreate = false;
++
++const char *
++get_process_name(int child_type)
++{
++    switch (child_type)
++    {
++        case B_WAL_RECEIVER:    return "walreceiver";
++        case B_WAL_SENDER:      return "walsender";
++        case B_WAL_WRITER:      return "walwriter";
++        case B_BG_WRITER:       return "bgwriter";
++        case B_CHECKPOINTER:    return "checkpointer";
++        case B_AUTOVAC_LAUNCHER:return "autovacuum";
++        default:                return  NULL;
++    }
++}
++
++bool
++rest_enabled_for_process(int child_type)
++{
++    if (rest_include_processes == NULL || rest_include_processes[0] == '\0')
++    {
++        return false;
++    }
++
++    const char *proc_name = get_process_name(child_type);
++
++    if (proc_name == NULL)
++    {
++        return false;
++    }
++
++    char *list = palloc(strlen(rest_include_processes) + 1);
++    strcpy(list, rest_include_processes);
++    char *token = strtok(list, ",");
++    bool found = false;
++
++    while (token != NULL)
++    {
++        while (*token == ' ')
++        {
++            token++;
++        }
++
++        char *end = token + strlen(token) - 1;
++        while (end > token && *end == ' ')
++        {
++            end--;
++        }
++        *(end + 1) = '\0';
++
++        if (strcmp(token, proc_name) == 0)
++        {
++            found = true;
++            break;
++        }
++        token = strtok(NULL, ",");
++    }
++
++    pfree(list);
++    return found;
++}
++
++void
++register_endpoint(const char *url, endpoint_handler handler, void *user_data)
++{
++    if (endpoints_count < MAX_ENDPOINTS)
++    {
++        endpoints[endpoints_count].url = url;
++        endpoints[endpoints_count].handler = handler;
++        endpoints[endpoints_count].user_data = user_data;
++        endpoints_count++;
++    }
++}
++
++static int
++rest_port(int child_type)
++{
++    switch(child_type)
++    {
++        case B_WAL_RECEIVER:    return PostPortNumber + 1000;
++        case B_WAL_SENDER:      return PostPortNumber + 1100;
++        case B_WAL_WRITER:      return PostPortNumber + 1200;
++        case B_BG_WRITER:       return PostPortNumber + 1300;
++        case B_CHECKPOINTER:    return PostPortNumber + 1400;
++        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 1500;
++        default:                return -1;
++    }
++}
++
++void
++rest_init(int child_type)
++{
++    if (!rest_enabled_for_process(child_type))
++    {
++        return;
++    }
++
++    port = rest_port(child_type);
++
++    if (port == -1)
++    {
++        return;
++    }
++
++    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
++    {
++        elog(ERROR, "rest: socket error");
++        return;
++    }
++
++    int flags = fcntl(server_socket, F_GETFL, 0);
++    fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
++
++    struct sockaddr_in server_addr;
++    memset(&server_addr, 0, sizeof(server_addr));
++    server_addr.sin_family = AF_INET;
++    server_addr.sin_port = htons(port);
++    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
++
++    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
++    {
++        elog(ERROR, "rest: bind error");
++        close(server_socket);
++        server_socket = -1;
++        return;
++    }
++
++    listen(server_socket, 100);
++
++    event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
++
++    AddWaitEventToSet(event_set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
++
++    elog(LOG, "rest: server started on port %d", port);
++}
++
++static void
++close_slot(int slot)
++{
++    if (clients[slot].fd >= 0)
++    {
++        close(clients[slot].fd);
++    }
++    clients[slot].active = false;
++    clients[slot].fd = -1;
++    need_recreate = true;
++}
++
++static int
++find_free_slot(void)
++{
++    for (int i = 0; i < MAX_CLIENTS; i++)
++    {
++        if (!clients[i].active)
++        {
++            return i;
++        }
++    }
++    return -1;
++}
++
++static int
++find_slot(int fd)
++{
++    for (int i = 0; i < MAX_CLIENTS; i++)
++    {
++        if (clients[i].active && clients[i].fd == fd)
++        {
++            return i;
++        }
++    }
++    return -1;
++}
++
++static void
++rest_recreate_event_set(void)
++{
++    FreeWaitEventSet(event_set);
++    event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
++    AddWaitEventToSet(event_set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
++
++    for (int i = 0; i < MAX_CLIENTS; i++)
++    {
++        if (clients[i].active)
++        {
++            AddWaitEventToSet(event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, clients[i].fd, NULL, NULL);
++        }
++    }
++
++    need_recreate = false;
++}
++
++static void
++rest_connection_accept(void)
++{
++    int client_socket = accept(server_socket, NULL, NULL);
++
++    if (client_socket < 0)
++    {
++        if (errno == EAGAIN || errno == EWOULDBLOCK)
++        {
++            return;
++        }
++        elog(ERROR, "rest: accept error");
++        return;
++    }
++
++    int slot = find_free_slot();
++
++    if (slot == -1) {
++        elog(ERROR, "rest: too many requests, try again later");
++        close(client_socket);
++        return;
++    }
++
++    clients[slot].active = true;
++    clients[slot].fd = client_socket;
++    clients[slot].read_pos = 0;
++    clients[slot].response_ready = false;
++    clients[slot].response_len = 0;
++    clients[slot].written = 0;
++    memset(clients[slot].read_buffer, 0, sizeof(clients[slot].read_buffer));
++    memset(clients[slot].response, 0, sizeof(clients[slot].response));
++
++    int client_flags = fcntl(clients[slot].fd, F_GETFL, 0);
++    fcntl(clients[slot].fd, F_SETFL, client_flags | O_NONBLOCK);
++
++    AddWaitEventToSet(event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, clients[slot].fd, NULL, NULL);
++
++    elog(DEBUG1, "rest: new connection accepted fd: %d, position: %d", client_socket, slot);
++}
++
++static bool
++rest_find_endpoint(const char *url, const char *method, const char *body, Response *response)
++{
++    Request request = {method, url, body, NULL};
++    for (int i = 0; i < endpoints_count; i++)
++    {
++        if (strcmp(url, endpoints[i].url) == 0)
++        {
++            request.user_data = endpoints[i].user_data;
++            endpoints[i].handler(&request, response);
++            return true;
++        }
++    }
++    return false;
++}
++
++static void
++rest_build_response(Client *client, Response *response)
++{
++    snprintf(client->response, sizeof(client->response),
++            "HTTP/1.1 %d %s\r\n"
++            "Content-Type: %s\r\n"
++            "Content-Length: %zu\r\n"
++            "\r\n"
++            "%s",
++            response->status_code,
++            response->status_text,
++            response->content_type,
++            strlen(response->body), response->body);
++
++    client->response_len = strlen(client->response);
++    client->written = 0;
++    client->response_ready = true;
++    elog(DEBUG1, "rest: response ready (%zu bytes), waiting for write", client->response_len);
++}
++
++static void
++rest_handle_request(Client *client, int slot)
++{
++    ssize_t bytes_read = read(client->fd, client->read_buffer + client->read_pos, 
++                                          sizeof(client->read_buffer) - client->read_pos - 1);
++    if (bytes_read < 0) {
++        if (errno == EAGAIN || errno == EWOULDBLOCK)
++        {
++            return;
++        }
++        elog(ERROR, "rest: read error");
++        close_slot(slot);
++        return;
++    }
++    else if (bytes_read == 0) {
++        elog(DEBUG1, "rest: client closed connection");
++        close_slot(slot);
++        return;
++    }
++
++    client->read_pos += bytes_read;
++    client->read_buffer[client->read_pos] = '\0';
++
++    elog(DEBUG1, "rest: read %zd bytes, read %zu bytes in total", bytes_read, client->read_pos);
++
++    if (strstr(client->read_buffer, "\r\n\r\n") == NULL)
++    {
++        return;
++    }
++
++    char method[16], url[256];
++
++    Response response = {200, "OK", "application/json", ""};
++
++    if (sscanf(client->read_buffer, "%15s %255s", method, url) != 2)
++    {
++        response.status_code = 400;
++        response.status_text = "Bad Request";
++        response.content_type = "text/plain";
++        snprintf(response.body, sizeof(response.body), "Bad Request\n");
++        rest_build_response(client, &response);
++        return;
++    }
++
++    char *request_body = strstr(client->read_buffer, "\r\n\r\n");
++    if (request_body)
++    {
++        request_body += 4;
++    }
++
++    if (rest_find_endpoint(url, method, request_body, &response))
++    {
++        rest_build_response(client, &response);
++    }
++
++    else
++    {
++        response.status_code = 404;
++        response.status_text = "NotFound";
++        response.content_type = "text/plain";
++        const char *error_body = "Invalid request.\n"
++                "Try: \ncurl -X <method> http:/<host>:<port>/<endpoint> -H <headers> -d <body>\n\n"
++                "example:\n"
++                "curl -X POST http:/localhost:8080/value/set "
++                "-H 'Content-Type: application/json' "
++                "-d '{\"value\": 300}'\n";
++
++        snprintf(response.body, sizeof(response.body), "%s", error_body);
++        rest_build_response(client, &response);
++    }
++}
++
++static void
++rest_handle_response(Client *client, int slot)
++{
++    size_t remaining = client->response_len - client->written;
++
++    ssize_t bytes_written = write(client->fd, client->response + client->written, remaining);
++    if (bytes_written < 0)
++    {
++        if (errno == EAGAIN || errno == EWOULDBLOCK)
++        {
++            return;
++        }
++        elog(ERROR, "rest: write error");
++        close_slot(slot);
++        return;
++    }
++    client->written += bytes_written;
++    elog(DEBUG1, "rest: %zd bytes written, %zu/%zu total", bytes_written, client->written, client->response_len);
++
++    if (client->written >= client->response_len){
++        elog(DEBUG1, "rest: response sent completely");
++        close_slot(slot);
++    }
++}
++
++void
++rest_server_poll(void)
++{
++    if (server_socket < 0 || event_set == NULL)
++    {
++        return;
++    }
++
++    if (need_recreate)
++    {
++        rest_recreate_event_set();
++    }
++
++    WaitEvent events[MAX_CLIENTS + 1];
++
++    int number_of_fd = WaitEventSetWait(event_set, 0, events, MAX_CLIENTS + 1, 0);
++
++    for (int i = 0; i < number_of_fd; i++)
++    {
++        if (events[i].fd == server_socket)
++        {
++            rest_connection_accept();
++            continue;
++        }
++
++        int slot = find_slot(events[i].fd);
++        if (slot == -1) {
++            elog(ERROR, "rest: client not found");
++            continue;
++        }
++
++        Client *client = &clients[slot];
++
++        if (events[i].events & WL_SOCKET_READABLE && !client->response_ready)
++        {
++            rest_handle_request(client, slot);
++        }
++
++        if (events[i].events & WL_SOCKET_WRITEABLE && client->response_ready)
++        {
++            rest_handle_response(client, slot);
++        }
++    }
++}
+diff --git a/src/backend/storage/ipc/latch.c b/src/backend/storage/ipc/latch.c
+index beadeb5e46a..df6333cb87d 100644
+--- a/src/backend/storage/ipc/latch.c
++++ b/src/backend/storage/ipc/latch.c
+@@ -23,9 +23,11 @@
+ #include "storage/latch.h"
+ #include "storage/waiteventset.h"
+ #include "utils/resowner.h"
++#include "rest/rest_server.h"
+ 
+ /* A common WaitEventSet used to implement WaitLatch() */
+ static WaitEventSet *LatchWaitSet;
++static bool rest_added_to_latch = false;
+ 
+ /* The positions of the latch and PM death events in LatchWaitSet */
+ #define LatchWaitSetLatchPos 0
+@@ -39,7 +41,7 @@ InitializeLatchWaitSet(void)
+ 	Assert(LatchWaitSet == NULL);
+ 
+ 	/* Set up the WaitEventSet used by WaitLatch(). */
+-	LatchWaitSet = CreateWaitEventSet(NULL, 2);
++	LatchWaitSet = CreateWaitEventSet(NULL, 3);
+ 	latch_pos = AddWaitEventToSet(LatchWaitSet, WL_LATCH_SET, PGINVALID_SOCKET,
+ 								  MyLatch, NULL);
+ 	Assert(latch_pos == LatchWaitSetLatchPos);
+@@ -193,13 +195,25 @@ WaitLatch(Latch *latch, int wakeEvents, long timeout,
+ 						(wakeEvents & (WL_EXIT_ON_PM_DEATH | WL_POSTMASTER_DEATH)),
+ 						NULL);
+ 
++	if (!rest_added_to_latch && server_socket >= 0)
++    {
++        AddWaitEventToSet(LatchWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
++        rest_added_to_latch = true;
++    }
++
+ 	if (WaitEventSetWait(LatchWaitSet,
+ 						 (wakeEvents & WL_TIMEOUT) ? timeout : -1,
+ 						 &event, 1,
+ 						 wait_event_info) == 0)
+ 		return WL_TIMEOUT;
+-	else
++	else 
++	{
++		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
++		{
++			rest_server_poll();
++		}
+ 		return event.events;
++	}
+ }
+ 
+ /*
+@@ -226,7 +240,13 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
+ 	int			ret = 0;
+ 	int			rc;
+ 	WaitEvent	event;
+-	WaitEventSet *set = CreateWaitEventSet(CurrentResourceOwner, 3);
++	int max_events = 3;
++	if (rest_enabled_for_process(MyBackendType))
++	{
++		max_events++;
++	}
++
++	WaitEventSet *set = CreateWaitEventSet(CurrentResourceOwner, max_events);
+ 
+ 	if (wakeEvents & WL_TIMEOUT)
+ 		Assert(timeout >= 0);
+@@ -258,15 +278,28 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
+ 		AddWaitEventToSet(set, ev, sock, NULL, NULL);
+ 	}
+ 
++	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
++	{
++		AddWaitEventToSet(set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
++	}
++
+ 	rc = WaitEventSetWait(set, timeout, &event, 1, wait_event_info);
+ 
+ 	if (rc == 0)
+ 		ret |= WL_TIMEOUT;
+ 	else
+ 	{
+-		ret |= event.events & (WL_LATCH_SET |
+-							   WL_POSTMASTER_DEATH |
+-							   WL_SOCKET_MASK);
++		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
++		{
++			rest_server_poll();
++		}
++
++		else
++		{
++			ret |= event.events & (WL_LATCH_SET |
++										WL_POSTMASTER_DEATH |
++										WL_SOCKET_MASK);
++		}
+ 	}
+ 
+ 	FreeWaitEventSet(set);
+diff --git a/src/backend/utils/misc/guc_tables.c b/src/backend/utils/misc/guc_tables.c
+index 6b82a23435e..1cd0dd536d2 100644
+--- a/src/backend/utils/misc/guc_tables.c
++++ b/src/backend/utils/misc/guc_tables.c
+@@ -102,6 +102,7 @@
+ #include "utils/ps_status.h"
+ #include "utils/rls.h"
+ #include "utils/xml.h"
++#include "rest/rest_server.h"
+ 
+ #ifdef TRACE_SYNCSCAN
+ #include "access/syncscan.h"
+@@ -4993,6 +4994,16 @@ struct config_string ConfigureNamesString[] =
+ 		check_log_connections, assign_log_connections, NULL
+ 	},
+ 
++	{
++		{"rest_include_processes", PGC_POSTMASTER, CUSTOM_OPTIONS,
++			gettext_noop("List of background processes where REST server is enabled."),
++			NULL,
++			GUC_LIST_INPUT
++		},
++		&rest_include_processes,
++		"",
++		NULL, NULL, NULL
++	},
+ 
+ 	/* End-of-list marker */
+ 	{
+diff --git a/src/backend/utils/misc/postgresql.conf.sample b/src/backend/utils/misc/postgresql.conf.sample
+index 0857667d0d6..ac044e94fb4 100644
+--- a/src/backend/utils/misc/postgresql.conf.sample
++++ b/src/backend/utils/misc/postgresql.conf.sample
+@@ -886,3 +886,5 @@
+ #------------------------------------------------------------------------------
+ 
+ # Add settings for extensions here
++
++#rest_include_processes = ''
+\ No newline at end of file
+diff --git a/src/include/libpq/libpq.h b/src/include/libpq/libpq.h
+index aeb66ca40cf..a680cbc31ad 100644
+--- a/src/include/libpq/libpq.h
++++ b/src/include/libpq/libpq.h
+@@ -62,7 +62,7 @@ extern PGDLLIMPORT WaitEventSet *FeBeWaitSet;
+ 
+ #define FeBeWaitSetSocketPos 0
+ #define FeBeWaitSetLatchPos 1
+-#define FeBeWaitSetNEvents 3
++#define FeBeWaitSetNEvents 4
+ 
+ extern int	ListenServerPort(int family, const char *hostName,
+ 							 unsigned short portNumber, const char *unixSocketDir,
+diff --git a/src/include/rest/endpoint_handlers.h b/src/include/rest/endpoint_handlers.h
+new file mode 100644
+index 00000000000..4a133b1cc00
+--- /dev/null
++++ b/src/include/rest/endpoint_handlers.h
+@@ -0,0 +1,8 @@
++#ifndef HTTP_HANDLE_H
++#define HTTP_HANDLE_H
++
++#include "rest/rest_server.h"
++
++extern void handle_info(Request *request, Response *response);
++
++#endif
+\ No newline at end of file
+diff --git a/src/include/rest/rest_server.h b/src/include/rest/rest_server.h
+new file mode 100644
+index 00000000000..c4bf64999a8
+--- /dev/null
++++ b/src/include/rest/rest_server.h
+@@ -0,0 +1,54 @@
++#ifndef REST_SERVER_H
++#define REST_SERVER_H
++
++#include "postgres.h"
++#include <stdbool.h>
++
++typedef struct
++{
++    const char *method;
++    const char *body;
++    const char *url;
++    void *user_data;
++} Request;
++
++typedef struct
++{
++    int status_code;
++    const char *status_text;
++    const char *content_type;
++    char body[4096];
++} Response;
++
++typedef void (*endpoint_handler)(Request *request, Response *response);
++
++typedef struct
++{
++    const char *url;
++    endpoint_handler handler;
++    void *user_data;
++} Endpoint;
++
++typedef struct
++{
++    bool active;
++    int fd;
++    int event_pos;
++    char response[4096];
++    size_t response_len;
++    char read_buffer[4096];
++    size_t read_pos;
++    size_t written;
++    bool response_ready;
++
++} Client;
++
++extern void rest_init(int child_type);
++extern void register_endpoint(const char *url, endpoint_handler handler, void *user_data);
++extern void rest_server_poll(void);
++extern const char *get_process_name(int child_type);
++extern char *rest_include_processes;
++extern bool rest_enabled_for_process(int child_type);
++extern int server_socket;
++
++#endif
+\ No newline at end of file
