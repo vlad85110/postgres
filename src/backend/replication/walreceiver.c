@@ -78,6 +78,8 @@
 #include "utils/guc.h"
 #include "utils/pg_lsn.h"
 #include "utils/ps_status.h"
+#include "stand/stand_delay_setter.h"
+#include "stand/stand_handlers.h"
 #include "utils/timestamp.h"
 #include "rest/rest_server.h"
 #include "rest/endpoint_handlers.h"
@@ -228,7 +230,7 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 	walrcv->walRcvState = WALRCV_STREAMING;
 
 	/* Fetch information required to start streaming */
-	walrcv->ready_to_display = false;
+	walrcv->ready_to_display = true;
 	strlcpy(conninfo, walrcv->conninfo, MAXCONNINFO);
 	strlcpy(slotname, walrcv->slotname, NAMEDATALEN);
 	is_temp_slot = walrcv->is_temp_slot;
@@ -316,6 +318,8 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 	register_endpoint("/status", handle_status, NULL);
 	register_endpoint("/lsn", handle_wal_position, NULL);
 	register_endpoint("/info", handle_info, NULL);
+	register_endpoint("/get_delays", handle_get_delays, NULL);
+	register_endpoint("/set_delay", handle_set_delay, NULL);
 
 	first_stream = true;
 	for (;;)
@@ -1013,6 +1017,9 @@ XLogWalRcvWrite(char *buf, Size nbytes, XLogRecPtr recptr, TimeLineID tli)
 		start = pgstat_prepare_io_time(track_wal_io_timing);
 
 		pgstat_report_wait_start(WAIT_EVENT_WAL_WRITE);
+
+		pg_usleep(ssd->WriteDelay * 1000); // Write Wait Timeout
+
 		byteswritten = pg_pwrite(recvFile, buf, segbytes, (off_t) startoff);
 		pgstat_report_wait_end();
 

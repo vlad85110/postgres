@@ -1,0 +1,72 @@
+#include "postgres.h"
+
+#include "stand/stand_delay_setter.h"
+
+#include <signal.h>
+#include "storage/fd.h"
+#include "storage/shmem.h"
+#include "utils/elog.h"
+
+#define TEST_DELAY_DELTA_MS 200
+#define TEST_DELAY_MAX_MS 60000
+#define FIXED_PHASE_DELAY_MS 1000
+
+StandSharedData *ssd = NULL;
+
+static volatile sig_atomic_t test_delay_increment_pending = false;
+
+void
+SignalHandlerForChangeDelays(SIGNAL_ARGS)
+{
+    test_delay_increment_pending = true;
+}
+
+Size
+StandShmemSize(void)
+{
+    return sizeof (StandSharedData);
+}
+
+void
+StandShmemInit(void)
+{
+    bool		found;
+
+    ssd = (StandSharedData *) ShmemInitStruct("Stand Shared Data", StandShmemSize(), &found);
+
+    if (!found)
+    {
+        ssd->WriteDelay = 0;
+        ssd->FlushDelay = 0;
+        ssd->ApplyDelay = 0;
+    }
+
+}
+
+void
+ChangeWFDelays(void) // WF - Write and Flush
+{
+    static bool fixed_phase_entered = false;
+
+    if (!test_delay_increment_pending)
+        return;
+
+    test_delay_increment_pending = false;
+
+    if (!fixed_phase_entered)
+    {
+        /* Первый полученный SIGUSR2: переход из "без задержки" в "фиксированную задержку". */
+        fixed_phase_entered = true;
+        ssd->WriteDelay = FIXED_PHASE_DELAY_MS;
+
+        ereport(LOG,
+                errmsg("Entered fixed delay phase: WriteDelay = %ld", ssd->WriteDelay));
+        return;
+    }
+
+    /* Каждый следующий SIGUSR2: фаза роста задержки. */
+    ssd->WriteDelay = Min(ssd->WriteDelay + TEST_DELAY_DELTA_MS, TEST_DELAY_MAX_MS);
+
+    ereport(LOG,
+            errmsg("Delays changed: WriteDelay = %ld, FlushDelay = %ld", ssd->WriteDelay, ssd->FlushDelay));
+}

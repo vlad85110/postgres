@@ -4696,6 +4696,7 @@ PostgresMain(const char *dbname, const char *username)
 		 */
 		DoingCommandRead = true;
 
+
 		/*
 		 * (3) read a command (loop blocks here)
 		 */
@@ -4730,6 +4731,7 @@ PostgresMain(const char *dbname, const char *username)
 		 * before resetting DoingCommandRead.
 		 */
 		CHECK_FOR_INTERRUPTS();
+
 		DoingCommandRead = false;
 
 		/*

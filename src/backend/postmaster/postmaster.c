@@ -122,6 +122,7 @@
 #include "utils/pidfile.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+#include "rest/rest_server.h"
 
 #ifdef EXEC_BACKEND
 #include "common/file_utils.h"
