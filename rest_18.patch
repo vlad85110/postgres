@@ -224,16 +224,15 @@ index 00000000000..8cc482794e9
 \ No newline at end of file
 diff --git a/src/backend/rest/README.txt b/src/backend/rest/README.txt
 new file mode 100644
-index 00000000000..21fd3e59479
+index 00000000000..5225b1eacf6
 --- /dev/null
 +++ b/src/backend/rest/README.txt
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,64 @@
 +сейчас сервер выключен
 +
 +можно включить в postgresql.conf
 +
-+rest_include_processes = 'walreceiver, walsender, walwriter,
-+                          bgwriter, checkpointer, autovacuum'
++rest_include_processes = 'walreceiver, walsender, walwriter, bgwriter, checkpointer, autovacuum'
 +----------------------------------------------------------------
 +
 +запрос на порт (port = порт, на котором запущен постгрес)
@@ -318,7 +317,7 @@ index 00000000000..4e6c23505b5
 \ No newline at end of file
 diff --git a/src/backend/rest/rest_server.c b/src/backend/rest/rest_server.c
 new file mode 100644
-index 00000000000..d8e6f14b2ff
+index 00000000000..20052274292
 --- /dev/null
 +++ b/src/backend/rest/rest_server.c
 @@ -0,0 +1,440 @@
@@ -588,7 +587,7 @@ index 00000000000..d8e6f14b2ff
 +static bool
 +rest_find_endpoint(const char *url, const char *method, const char *body, Response *response)
 +{
-+    Request request = {method, url, body, NULL};
++    Request request = {method, body, url, NULL};
 +    for (int i = 0; i < endpoints_count; i++)
 +    {
 +        if (strcmp(url, endpoints[i].url) == 0)
