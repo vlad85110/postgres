@@ -108,12 +108,12 @@ rest_port(int child_type)
 {
     switch(child_type)
     {
-        case B_WAL_RECEIVER:    return 8080;
-        case B_WAL_SENDER:      return 8081;
-        case B_WAL_WRITER:      return 8082;
-        case B_BG_WRITER:       return PostPortNumber + 3000;
-        case B_CHECKPOINTER:    return PostPortNumber + 3100;
-        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 3200;
+        case B_WAL_RECEIVER:    return PostPortNumber + 1000;
+        case B_WAL_SENDER:      return PostPortNumber + 1100;
+        case B_WAL_WRITER:      return PostPortNumber + 1200;
+        case B_BG_WRITER:       return PostPortNumber + 1300;
+        case B_CHECKPOINTER:    return PostPortNumber + 1400;
+        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 1500;
         default:                return -1;
     }
 }
@@ -152,6 +152,7 @@ rest_init(int child_type)
     {
         elog(ERROR, "rest: bind error");
         close(server_socket);
+        server_socket = -1;
         return;
     }
 
