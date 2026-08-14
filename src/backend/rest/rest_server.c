@@ -41,7 +41,7 @@ get_process_name(int child_type)
         case B_BG_WRITER:       return "bgwriter";
         case B_CHECKPOINTER:    return "checkpointer";
         case B_AUTOVAC_LAUNCHER:return "autovacuum";
-        default:                return  NULL;
+        default:                return "unknown";
     }
 }
 
@@ -108,12 +108,12 @@ rest_port(int child_type)
 {
     switch(child_type)
     {
-        case B_WAL_RECEIVER:    return PostPortNumber + 1000;
-        case B_WAL_SENDER:      return PostPortNumber + 1100;
-        case B_WAL_WRITER:      return PostPortNumber + 1200;
-        case B_BG_WRITER:       return PostPortNumber + 1300;
-        case B_CHECKPOINTER:    return PostPortNumber + 1400;
-        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 1500;
+        case B_WAL_RECEIVER:    return 8080;
+        case B_WAL_SENDER:      return 8081;
+        case B_WAL_WRITER:      return 8082;
+        case B_BG_WRITER:       return PostPortNumber + 3000;
+        case B_CHECKPOINTER:    return PostPortNumber + 3100;
+        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 3200;
         default:                return -1;
     }
 }
@@ -126,7 +126,10 @@ rest_init(int child_type)
         return;
     }
 
+    ereport(LOG, errmsg_internal("rest: am_walsender=%d, MyBackendType=%d", am_walsender, MyBackendType));
+
     port = rest_port(child_type);
+    ereport(LOG, errmsg_internal("rest: port=%d", port));
 
     if (port == -1)
     {
@@ -135,7 +138,7 @@ rest_init(int child_type)
 
     if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        elog(ERROR, "rest: socket error");
+        elog(LOG, "rest: socket error");
         return;
     }
 
@@ -150,9 +153,8 @@ rest_init(int child_type)
 
     if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
     {
-        elog(ERROR, "rest: bind error");
+        elog(LOG, "rest: bind error");
         close(server_socket);
-        server_socket = -1;
         return;
     }
 
@@ -232,14 +234,14 @@ rest_connection_accept(void)
         {
             return;
         }
-        elog(ERROR, "rest: accept error");
+        elog(LOG, "rest: accept error");
         return;
     }
 
     int slot = find_free_slot();
 
     if (slot == -1) {
-        elog(ERROR, "rest: too many requests, try again later");
+        elog(LOG, "rest: too many requests, try again later");
         close(client_socket);
         return;
     }
@@ -258,7 +260,7 @@ rest_connection_accept(void)
 
     AddWaitEventToSet(event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, clients[slot].fd, NULL, NULL);
 
-    elog(DEBUG1, "rest: new connection accepted fd: %d, position: %d", client_socket, slot);
+    elog(LOG, "rest: new connection accepted fd: %d, position: %d", client_socket, slot);
 }
 
 static bool
@@ -294,7 +296,7 @@ rest_build_response(Client *client, Response *response)
     client->response_len = strlen(client->response);
     client->written = 0;
     client->response_ready = true;
-    elog(DEBUG1, "rest: response ready (%zu bytes), waiting for write", client->response_len);
+    elog(LOG, "rest: response ready (%zu bytes), waiting for write", client->response_len);
 }
 
 static void
@@ -307,12 +309,12 @@ rest_handle_request(Client *client, int slot)
         {
             return;
         }
-        elog(ERROR, "rest: read error");
+        elog(LOG, "rest: read error");
         close_slot(slot);
         return;
     }
     else if (bytes_read == 0) {
-        elog(DEBUG1, "rest: client closed connection");
+        elog(LOG, "rest: client closed connection");
         close_slot(slot);
         return;
     }
@@ -320,7 +322,7 @@ rest_handle_request(Client *client, int slot)
     client->read_pos += bytes_read;
     client->read_buffer[client->read_pos] = '\0';
 
-    elog(DEBUG1, "rest: read %zd bytes, read %zu bytes in total", bytes_read, client->read_pos);
+    elog(LOG, "rest: read %zd bytes, read %zu bytes in total", bytes_read, client->read_pos);
 
     if (strstr(client->read_buffer, "\r\n\r\n") == NULL)
     {
@@ -381,15 +383,15 @@ rest_handle_response(Client *client, int slot)
         {
             return;
         }
-        elog(ERROR, "rest: write error");
+        elog(LOG, "rest: write error");
         close_slot(slot);
         return;
     }
     client->written += bytes_written;
-    elog(DEBUG1, "rest: %zd bytes written, %zu/%zu total", bytes_written, client->written, client->response_len);
+    elog(LOG, "rest: %zd bytes written, %zu/%zu total", bytes_written, client->written, client->response_len);
 
     if (client->written >= client->response_len){
-        elog(DEBUG1, "rest: response sent completely");
+        elog(LOG, "rest: response sent completely");
         close_slot(slot);
     }
 }
@@ -421,7 +423,7 @@ rest_server_poll(void)
 
         int slot = find_slot(events[i].fd);
         if (slot == -1) {
-            elog(ERROR, "rest: client not found");
+            elog(LOG, "rest: client not found");
             continue;
         }
 
