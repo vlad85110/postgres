@@ -52,6 +52,7 @@
 #include "storage/pg_shmem.h"
 #include "tcop/backend_startup.h"
 #include "utils/memutils.h"
+#include "rest/rest_server.h"
 
 #ifdef EXEC_BACKEND
 #include "nodes/queryjumble.h"
@@ -276,6 +277,11 @@ postmaster_child_launch(BackendType child_type, int child_slot,
 		 * data.
 		 */
 		MemoryContextSwitchTo(TopMemoryContext);
+
+		if (child_type != B_BACKEND)
+		{
+			rest_init(child_type);
+		}
 
 		MyPMChildSlot = child_slot;
 		if (client_sock)

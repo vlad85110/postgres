@@ -110,6 +110,8 @@
 #include "utils/syscache.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "rest/endpoint_handlers.h"
+#include "rest/rest_server.h"
 
 
 /*
@@ -569,6 +571,9 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
 	 */
 	rebuild_database_list(InvalidOid);
 
+	register_endpoint("/info", handle_info, NULL);
+	register_endpoint("/status", handle_status, NULL);
+
 	/* loop until shutdown request */
 	while (!ShutdownRequestPending)
 	{
@@ -597,6 +602,8 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
 		ResetLatch(MyLatch);
 
 		ProcessAutoVacLauncherInterrupts();
+
+		rest_server_poll();
 
 		/*
 		 * a worker finished, or postmaster signaled failure to start a worker

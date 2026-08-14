@@ -23,9 +23,11 @@
 #include "storage/latch.h"
 #include "storage/waiteventset.h"
 #include "utils/resowner.h"
+#include "rest/rest_server.h"
 
 /* A common WaitEventSet used to implement WaitLatch() */
 static WaitEventSet *LatchWaitSet;
+static bool rest_added_to_latch = false;
 
 /* The positions of the latch and PM death events in LatchWaitSet */
 #define LatchWaitSetLatchPos 0
@@ -39,7 +41,7 @@ InitializeLatchWaitSet(void)
 	Assert(LatchWaitSet == NULL);
 
 	/* Set up the WaitEventSet used by WaitLatch(). */
-	LatchWaitSet = CreateWaitEventSet(NULL, 2);
+	LatchWaitSet = CreateWaitEventSet(NULL, 3);
 	latch_pos = AddWaitEventToSet(LatchWaitSet, WL_LATCH_SET, PGINVALID_SOCKET,
 								  MyLatch, NULL);
 	Assert(latch_pos == LatchWaitSetLatchPos);
@@ -193,13 +195,25 @@ WaitLatch(Latch *latch, int wakeEvents, long timeout,
 						(wakeEvents & (WL_EXIT_ON_PM_DEATH | WL_POSTMASTER_DEATH)),
 						NULL);
 
+	if (!rest_added_to_latch && server_socket >= 0)
+    {
+        AddWaitEventToSet(LatchWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+        rest_added_to_latch = true;
+    }
+
 	if (WaitEventSetWait(LatchWaitSet,
 						 (wakeEvents & WL_TIMEOUT) ? timeout : -1,
 						 &event, 1,
 						 wait_event_info) == 0)
 		return WL_TIMEOUT;
-	else
+	else 
+	{
+		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
+		{
+			rest_server_poll();
+		}
 		return event.events;
+	}
 }
 
 /*
@@ -226,7 +240,13 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 	int			ret = 0;
 	int			rc;
 	WaitEvent	event;
-	WaitEventSet *set = CreateWaitEventSet(CurrentResourceOwner, 3);
+	int max_events = 3;
+	if (rest_enabled_for_process(MyBackendType))
+	{
+		max_events++;
+	}
+
+	WaitEventSet *set = CreateWaitEventSet(CurrentResourceOwner, max_events);
 
 	if (wakeEvents & WL_TIMEOUT)
 		Assert(timeout >= 0);
@@ -258,15 +278,28 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 		AddWaitEventToSet(set, ev, sock, NULL, NULL);
 	}
 
+	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
+	{
+		AddWaitEventToSet(set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+	}
+
 	rc = WaitEventSetWait(set, timeout, &event, 1, wait_event_info);
 
 	if (rc == 0)
 		ret |= WL_TIMEOUT;
 	else
 	{
-		ret |= event.events & (WL_LATCH_SET |
-							   WL_POSTMASTER_DEATH |
-							   WL_SOCKET_MASK);
+		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
+		{
+			rest_server_poll();
+		}
+
+		else
+		{
+			ret |= event.events & (WL_LATCH_SET |
+										WL_POSTMASTER_DEATH |
+										WL_SOCKET_MASK);
+		}
 	}
 
 	FreeWaitEventSet(set);
