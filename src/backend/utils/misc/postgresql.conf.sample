@@ -887,4 +887,4 @@
 
 # Add settings for extensions here
 
-#rest_include_process = ''
+#rest_include_processes = ''
