@@ -266,7 +266,7 @@ rest_connection_accept(void)
 static bool
 rest_find_endpoint(const char *url, const char *method, const char *body, Response *response)
 {
-    Request request = {method, url, body, NULL};
+    Request request = {method, body, url, NULL};
     for (int i = 0; i < endpoints_count; i++)
     {
         if (strcmp(url, endpoints[i].url) == 0)

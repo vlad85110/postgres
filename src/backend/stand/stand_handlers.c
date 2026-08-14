@@ -15,10 +15,11 @@ handle_set_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"missing body\"}\n");
+        return;
     }
 
     parsed = sscanf(request->body,
-                     " { \"type_delay\" : \"%5[^\"]\" , \"ms\" : %ld",
+                     "{ \"type_delay\" : \"%5[^\"]\" , \"ms\" : %ld",
                      type_delay, &ms);
 
     if (parsed != 2)
@@ -27,6 +28,7 @@ handle_set_delay(Request *request, Response *response)
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body),
             "{\"status\": \"error\", \"message\": \"expected {\\\"type_delay\\\": \\\"write|flush|apply\\\", \\\"ms\\\": <long>=0>}\"}\n");
+        return;
     }
 
     if (ms < 0)
@@ -34,6 +36,7 @@ handle_set_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"'ms' must be >= 0\"}\n");
+        return;
     }
 
     if (strcmp(type_delay, "write") == 0)
@@ -47,6 +50,7 @@ handle_set_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"'type_delay' must be one of: write, flush, apply\"}\n");
+        return;
     }
 
     response->status_code = 200;
@@ -77,10 +81,11 @@ handle_change_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"missing body\"}\n");
+        return;
     }
 
     parsed = sscanf(request->body,
-                     " { \"type_delay\" : \"%5[^\"]\" , \"ms\" : %ld",
+                     "{ \"type_delay\" : \"%5[^\"]\" , \"ms\" : %ld",
                      type_delay, &ms);
 
     if (parsed != 2)
@@ -88,6 +93,7 @@ handle_change_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"expected {\\\"type_delay\\\": \\\"write|flush|apply\\\", \\\"ms\\\": <long>=0>}\"}\n");
+        return;
     }
 
     if (ms < 0)
@@ -95,6 +101,7 @@ handle_change_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"'ms' must be >= 0\"}\n");
+        return;
     }
 
     if (strcmp(type_delay, "write") == 0)
@@ -108,6 +115,7 @@ handle_change_delay(Request *request, Response *response)
         response->status_code = 400;
         response->status_text = "Bad Request";
         snprintf(response->body, sizeof(response->body), "{\"status\": \"error\", \"message\": \"'type_delay' must be one of: write, flush, apply\"}\n");
+        return;
     }
 
     response->status_code = 200;
