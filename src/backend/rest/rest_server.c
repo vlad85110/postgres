@@ -1,5 +1,4 @@
 #include "rest/rest_server.h"
-#include "storage/waiteventset.h"
 #include "utils/memutils.h"
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -11,24 +10,10 @@
 #include "replication/walsender.h"
 #include "utils/guc.h"
 
-#define MAX_ENDPOINTS 100
-#define MAX_CLIENTS 20
-
 char *rest_include_processes = NULL;
-
 extern int PostPortNumber;
 
-static Endpoint endpoints[MAX_ENDPOINTS];
-static Client clients[MAX_CLIENTS];
-
-static int endpoints_count = 0;
-
-WaitEventSet *event_set = NULL;
-
-int server_socket = -1;
-int port = -1;
-
-static bool need_recreate = false;
+RestServer *rest_server = NULL;
 
 const char *
 get_process_name(int child_type)
@@ -92,14 +77,18 @@ rest_enabled_for_process(int child_type)
 }
 
 void
-register_endpoint(const char *url, endpoint_handler handler, void *user_data)
+register_endpoint(RestServer *server, const char *url, endpoint_handler handler, void *user_data)
 {
-    if (endpoints_count < MAX_ENDPOINTS)
+    if (server == NULL)
     {
-        endpoints[endpoints_count].url = url;
-        endpoints[endpoints_count].handler = handler;
-        endpoints[endpoints_count].user_data = user_data;
-        endpoints_count++;
+        return;
+    }
+    if (server->endpoints_count < MAX_ENDPOINTS)
+    {
+        server->endpoints[server->endpoints_count].url = url;
+        server->endpoints[server->endpoints_count].handler = handler;
+        server->endpoints[server->endpoints_count].user_data = user_data;
+        server->endpoints_count++;
     }
 }
 
@@ -117,30 +106,41 @@ rest_port(int child_type)
         default:                return -1;
     }
 }
-
-void
+RestServer *
 rest_init(int child_type)
 {
+    RestServer *server;
+    int port;
+
     if (!rest_enabled_for_process(child_type))
     {
-        return;
+        return NULL;
     }
 
     port = rest_port(child_type);
 
     if (port == -1)
     {
-        return;
+        return NULL;
     }
 
-    if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    server = palloc0(sizeof(RestServer));
+    server->server_socket = -1;
+    server->port = port;
+    server->event_set = NULL;
+    server->need_recreate = false;
+    server->endpoints_count = 0;
+    memset(server->clients, 0, sizeof(server->clients));
+
+    if ((server->server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
         elog(ERROR, "rest: socket error");
-        return;
+        pfree(server);
+        return NULL;
     }
 
-    int flags = fcntl(server_socket, F_GETFL, 0);
-    fcntl(server_socket, F_SETFL, flags | O_NONBLOCK);
+    int flags = fcntl(server->server_socket, F_GETFL, 0);
+    fcntl(server->server_socket, F_SETFL, flags | O_NONBLOCK);
 
     struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
@@ -148,41 +148,44 @@ rest_init(int child_type)
     server_addr.sin_port = htons(port);
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+    if (bind(server->server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
     {
         elog(ERROR, "rest: bind error");
-        close(server_socket);
-        server_socket = -1;
-        return;
+        close(server->server_socket);
+        server->server_socket = -1;
+        pfree(server);
+        return NULL;
     }
 
-    listen(server_socket, 100);
+    listen(server->server_socket, 100);
 
-    event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
+    server->event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
 
-    AddWaitEventToSet(event_set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+    AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE, server->server_socket, NULL, NULL);
 
-    elog(LOG, "rest: server started on port %d", port);
+    elog(LOG, "rest: server started on port %d", server->port);
+
+    return server;
 }
 
 static void
-close_slot(int slot)
+close_slot(RestServer *server, int slot)
 {
-    if (clients[slot].fd >= 0)
+    if (server->clients[slot].fd >= 0)
     {
-        close(clients[slot].fd);
+        close(server->clients[slot].fd);
     }
-    clients[slot].active = false;
-    clients[slot].fd = -1;
-    need_recreate = true;
+    server->clients[slot].active = false;
+    server->clients[slot].fd = -1;
+    server->need_recreate = true;
 }
 
 static int
-find_free_slot(void)
+find_free_slot(RestServer *server)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (!clients[i].active)
+        if (!server->clients[i].active)
         {
             return i;
         }
@@ -191,11 +194,11 @@ find_free_slot(void)
 }
 
 static int
-find_slot(int fd)
+find_slot(RestServer *server, int fd)
 {
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (clients[i].active && clients[i].fd == fd)
+        if (server->clients[i].active && server->clients[i].fd == fd)
         {
             return i;
         }
@@ -204,27 +207,27 @@ find_slot(int fd)
 }
 
 static void
-rest_recreate_event_set(void)
+rest_recreate_event_set(RestServer *server)
 {
-    FreeWaitEventSet(event_set);
-    event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
-    AddWaitEventToSet(event_set, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+    FreeWaitEventSet(server->event_set);
+    server->event_set = CreateWaitEventSet(NULL, MAX_CLIENTS + 1);
+    AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE, server->server_socket, NULL, NULL);
 
     for (int i = 0; i < MAX_CLIENTS; i++)
     {
-        if (clients[i].active)
+        if (server->clients[i].active)
         {
-            AddWaitEventToSet(event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, clients[i].fd, NULL, NULL);
+            AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, server->clients[i].fd, NULL, NULL);
         }
     }
 
-    need_recreate = false;
+    server->need_recreate = false;
 }
 
 static void
-rest_connection_accept(void)
+rest_connection_accept(RestServer *server)
 {
-    int client_socket = accept(server_socket, NULL, NULL);
+    int client_socket = accept(server->server_socket, NULL, NULL);
 
     if (client_socket < 0)
     {
@@ -236,7 +239,7 @@ rest_connection_accept(void)
         return;
     }
 
-    int slot = find_free_slot();
+    int slot = find_free_slot(server);
 
     if (slot == -1) {
         elog(ERROR, "rest: too many requests, try again later");
@@ -244,33 +247,33 @@ rest_connection_accept(void)
         return;
     }
 
-    clients[slot].active = true;
-    clients[slot].fd = client_socket;
-    clients[slot].read_pos = 0;
-    clients[slot].response_ready = false;
-    clients[slot].response_len = 0;
-    clients[slot].written = 0;
-    memset(clients[slot].read_buffer, 0, sizeof(clients[slot].read_buffer));
-    memset(clients[slot].response, 0, sizeof(clients[slot].response));
+    server->clients[slot].active = true;
+    server->clients[slot].fd = client_socket;
+    server->clients[slot].read_pos = 0;
+    server->clients[slot].response_ready = false;
+    server->clients[slot].response_len = 0;
+    server->clients[slot].written = 0;
+    memset(server->clients[slot].read_buffer, 0, sizeof(server->clients[slot].read_buffer));
+    memset(server->clients[slot].response, 0, sizeof(server->clients[slot].response));
 
-    int client_flags = fcntl(clients[slot].fd, F_GETFL, 0);
-    fcntl(clients[slot].fd, F_SETFL, client_flags | O_NONBLOCK);
+    int client_flags = fcntl(server->clients[slot].fd, F_GETFL, 0);
+    fcntl(server->clients[slot].fd, F_SETFL, client_flags | O_NONBLOCK);
 
-    AddWaitEventToSet(event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, clients[slot].fd, NULL, NULL);
+    AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, server->clients[slot].fd, NULL, NULL);
 
     elog(DEBUG1, "rest: new connection accepted fd: %d, position: %d", client_socket, slot);
 }
 
 static bool
-rest_find_endpoint(const char *url, const char *method, const char *body, Response *response)
+rest_find_endpoint(RestServer *server, const char *url, const char *method, const char *body, Response *response)
 {
     Request request = {method, body, url, NULL};
-    for (int i = 0; i < endpoints_count; i++)
+    for (int i = 0; i < server->endpoints_count; i++)
     {
-        if (strcmp(url, endpoints[i].url) == 0)
+        if (strcmp(url, server->endpoints[i].url) == 0)
         {
-            request.user_data = endpoints[i].user_data;
-            endpoints[i].handler(&request, response);
+            request.user_data = server->endpoints[i].user_data;
+            server->endpoints[i].handler(&request, response);
             return true;
         }
     }
@@ -298,7 +301,7 @@ rest_build_response(Client *client, Response *response)
 }
 
 static void
-rest_handle_request(Client *client, int slot)
+rest_handle_request(RestServer *server, Client *client, int slot)
 {
     ssize_t bytes_read = read(client->fd, client->read_buffer + client->read_pos, 
                                           sizeof(client->read_buffer) - client->read_pos - 1);
@@ -308,12 +311,12 @@ rest_handle_request(Client *client, int slot)
             return;
         }
         elog(ERROR, "rest: read error");
-        close_slot(slot);
+        close_slot(server, slot);
         return;
     }
     else if (bytes_read == 0) {
         elog(DEBUG1, "rest: client closed connection");
-        close_slot(slot);
+        close_slot(server, slot);
         return;
     }
 
@@ -347,7 +350,7 @@ rest_handle_request(Client *client, int slot)
         request_body += 4;
     }
 
-    if (rest_find_endpoint(url, method, request_body, &response))
+    if (rest_find_endpoint(server, url, method, request_body, &response))
     {
         rest_build_response(client, &response);
     }
@@ -370,7 +373,7 @@ rest_handle_request(Client *client, int slot)
 }
 
 static void
-rest_handle_response(Client *client, int slot)
+rest_handle_response(RestServer *server, Client *client, int slot)
 {
     size_t remaining = client->response_len - client->written;
 
@@ -382,7 +385,7 @@ rest_handle_response(Client *client, int slot)
             return;
         }
         elog(ERROR, "rest: write error");
-        close_slot(slot);
+        close_slot(server, slot);
         return;
     }
     client->written += bytes_written;
@@ -390,51 +393,51 @@ rest_handle_response(Client *client, int slot)
 
     if (client->written >= client->response_len){
         elog(DEBUG1, "rest: response sent completely");
-        close_slot(slot);
+        close_slot(server, slot);
     }
 }
 
 void
-rest_server_poll(void)
+rest_server_poll(RestServer *server)
 {
-    if (server_socket < 0 || event_set == NULL)
+    if (server == NULL || server->server_socket < 0 || server->event_set == NULL)
     {
         return;
     }
 
-    if (need_recreate)
+    if (server->need_recreate)
     {
-        rest_recreate_event_set();
+        rest_recreate_event_set(server);
     }
 
     WaitEvent events[MAX_CLIENTS + 1];
 
-    int number_of_fd = WaitEventSetWait(event_set, 0, events, MAX_CLIENTS + 1, 0);
+    int number_of_fd = WaitEventSetWait(server->event_set, 0, events, MAX_CLIENTS + 1, 0);
 
     for (int i = 0; i < number_of_fd; i++)
     {
-        if (events[i].fd == server_socket)
+        if (events[i].fd == server->server_socket)
         {
-            rest_connection_accept();
+            rest_connection_accept(server);
             continue;
         }
 
-        int slot = find_slot(events[i].fd);
+        int slot = find_slot(server, events[i].fd);
         if (slot == -1) {
             elog(ERROR, "rest: client not found");
             continue;
         }
 
-        Client *client = &clients[slot];
+        Client *client = &server->clients[slot];
 
         if (events[i].events & WL_SOCKET_READABLE && !client->response_ready)
         {
-            rest_handle_request(client, slot);
+            rest_handle_request(server, client, slot);
         }
 
         if (events[i].events & WL_SOCKET_WRITEABLE && client->response_ready)
         {
-            rest_handle_response(client, slot);
+            rest_handle_response(server, client, slot);
         }
     }
 }

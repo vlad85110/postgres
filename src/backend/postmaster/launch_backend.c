@@ -280,7 +280,7 @@ postmaster_child_launch(BackendType child_type, int child_slot,
 
 		if (child_type != B_BACKEND)
 		{
-			rest_init(child_type);
+			rest_server = rest_init(child_type);
 		}
 
 		MyPMChildSlot = child_slot;

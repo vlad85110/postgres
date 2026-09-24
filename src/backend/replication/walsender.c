@@ -2838,14 +2838,14 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	last_reply_timestamp = GetCurrentTimestamp();
 	waiting_for_ping_response = false;
 
-	register_endpoint("/status", handle_status, NULL);
-	register_endpoint("/info", handle_info, NULL);
+	rest_server = rest_init(MyBackendType);
 
-	rest_init(MyBackendType);
+	register_endpoint(rest_server, "/info", handle_info, NULL);
+	register_endpoint(rest_server, "/status", handle_status, NULL);
 
-	if (rest_enabled_for_process(MyBackendType) && server_socket >= 0)
+	if (rest_server != NULL && rest_server->server_socket >= 0)
 	{
-		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, server_socket, NULL, NULL);
+		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, rest_server->server_socket, NULL, NULL);
 	}
 
 	/*
@@ -2859,7 +2859,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 
 		CHECK_FOR_INTERRUPTS();
 
-		rest_server_poll();
+		rest_server_poll(rest_server);
 
 		/* Process any requests or signals received recently */
 		if (ConfigReloadPending)
@@ -3824,10 +3824,10 @@ WalSndWait(uint32 socket_events, long timeout, uint32 wait_event)
 	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1)
 	{
 		
-		if (event.events & WL_SOCKET_READABLE && event.fd == server_socket)
+		if (rest_server != NULL && event.events & WL_SOCKET_READABLE && event.fd == rest_server->server_socket)
 		{
 			ConditionVariableCancelSleep();
-			rest_server_poll();
+			rest_server_poll(rest_server);
 		}
 
 		else if (event.events & WL_POSTMASTER_DEATH)

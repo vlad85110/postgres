@@ -344,8 +344,8 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 	 */
 	ProcGlobal->checkpointerProc = MyProcNumber;
 
-	register_endpoint("/info", handle_info, NULL);
-	register_endpoint("/status", handle_status, NULL);
+	register_endpoint(rest_server, "/info", handle_info, NULL);
+	register_endpoint(rest_server, "/status", handle_status, NULL);
 
 	/*
 	 * Loop until we've been asked to write the shutdown checkpoint or
@@ -371,7 +371,7 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 
 		ProcessCheckpointerInterrupts();
 
-		rest_server_poll();
+		rest_server_poll(rest_server);
 
 		if (ShutdownXLOGPending || ShutdownRequestPending)
 			break;

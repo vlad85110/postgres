@@ -571,8 +571,8 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
 	 */
 	rebuild_database_list(InvalidOid);
 
-	register_endpoint("/info", handle_info, NULL);
-	register_endpoint("/status", handle_status, NULL);
+	register_endpoint(rest_server, "/info", handle_info, NULL);
+	register_endpoint(rest_server, "/status", handle_status, NULL);
 
 	/* loop until shutdown request */
 	while (!ShutdownRequestPending)
@@ -603,7 +603,7 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
 
 		ProcessAutoVacLauncherInterrupts();
 
-		rest_server_poll();
+		rest_server_poll(rest_server);
 
 		/*
 		 * a worker finished, or postmaster signaled failure to start a worker

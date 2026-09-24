@@ -27,5 +27,5 @@ void
 handle_info(Request *request, Response *response)
 {
     const char *proc_name = get_process_name(MyBackendType);
-    snprintf(response->body, sizeof(response->body), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, port);
+    snprintf(response->body, sizeof(response->body), "{\"process\": \"%s\", \"port\": %d}\n", proc_name, rest_server->port);
 }

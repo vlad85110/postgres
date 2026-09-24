@@ -217,8 +217,8 @@ WalWriterMain(const void *startup_data, size_t startup_data_len)
 	 */
 	ProcGlobal->walwriterProc = MyProcNumber;
 
-	register_endpoint("/info", handle_info, NULL);
-	register_endpoint("/status", handle_status, NULL);
+	register_endpoint(rest_server, "/info", handle_info, NULL);
+	register_endpoint(rest_server, "/status", handle_status, NULL);
 
 	/*
 	 * Loop forever
@@ -248,7 +248,7 @@ WalWriterMain(const void *startup_data, size_t startup_data_len)
 		/* Process any signals received recently */
 		ProcessMainLoopInterrupts();
 
-		rest_server_poll();
+		rest_server_poll(rest_server);
 
 		/*
 		 * Do what we're here for; then, if XLogBackgroundFlush() found useful
