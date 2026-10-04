@@ -134,7 +134,7 @@ rest_init(int child_type)
 
     if ((server->server_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
     {
-        elog(ERROR, "rest: socket error");
+        elog(WARNING, "rest: socket error: %m");
         pfree(server);
         return NULL;
     }
@@ -150,7 +150,7 @@ rest_init(int child_type)
 
     if (bind(server->server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
     {
-        elog(ERROR, "rest: bind error");
+        elog(WARNING, "rest: bind error: %m");
         close(server->server_socket);
         server->server_socket = -1;
         pfree(server);
@@ -235,14 +235,14 @@ rest_connection_accept(RestServer *server)
         {
             return;
         }
-        elog(ERROR, "rest: accept error");
+        elog(WARNING, "rest: accept error: %m");
         return;
     }
 
     int slot = find_free_slot(server);
 
     if (slot == -1) {
-        elog(ERROR, "rest: too many requests, try again later");
+        elog(WARNING, "rest: too many requests, try again later");
         close(client_socket);
         return;
     }
@@ -310,7 +310,7 @@ rest_handle_request(RestServer *server, Client *client, int slot)
         {
             return;
         }
-        elog(ERROR, "rest: read error");
+        elog(WARNING, "rest: read error: %m");
         close_slot(server, slot);
         return;
     }
@@ -384,7 +384,7 @@ rest_handle_response(RestServer *server, Client *client, int slot)
         {
             return;
         }
-        elog(ERROR, "rest: write error");
+        elog(WARNING, "rest: write error: %m");
         close_slot(server, slot);
         return;
     }
@@ -424,7 +424,7 @@ rest_server_poll(RestServer *server)
 
         int slot = find_slot(server, events[i].fd);
         if (slot == -1) {
-            elog(ERROR, "rest: client not found");
+            elog(WARNING, "rest: client not found");
             continue;
         }
 

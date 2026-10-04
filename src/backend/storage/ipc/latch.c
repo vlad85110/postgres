@@ -195,7 +195,7 @@ WaitLatch(Latch *latch, int wakeEvents, long timeout,
 						(wakeEvents & (WL_EXIT_ON_PM_DEATH | WL_POSTMASTER_DEATH)),
 						NULL);
 
-	if (rest_server != NULL && !rest_added_to_latch && rest_server->server_socket >= 0)
+	if (rest_server != NULL && !rest_added_to_latch)
     {
         AddWaitEventToSet(LatchWaitSet, WL_SOCKET_READABLE, rest_server->server_socket, NULL, NULL);
         rest_added_to_latch = true;
@@ -278,7 +278,7 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 		AddWaitEventToSet(set, ev, sock, NULL, NULL);
 	}
 
-	if (rest_server != NULL && rest_server->server_socket >= 0)
+	if (rest_server != NULL)
 	{
 		AddWaitEventToSet(set, WL_SOCKET_READABLE, rest_server->server_socket, NULL, NULL);
 	}

@@ -2843,7 +2843,7 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	register_endpoint(rest_server, "/info", handle_info, NULL);
 	register_endpoint(rest_server, "/status", handle_status, NULL);
 
-	if (rest_server != NULL && rest_server->server_socket >= 0)
+	if (rest_server != NULL)
 	{
 		AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, rest_server->server_socket, NULL, NULL);
 	}
