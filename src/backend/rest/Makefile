@@ -2,6 +2,6 @@ subdir = src/backend/rest
 top_builddir = ../../..
 include $(top_builddir)/src/Makefile.global
 
-OBJS = rest_server.o endpoint_handlers.o
+OBJS = rest_server.o endpoint_handlers.o rest_config.o
 
 include $(top_srcdir)/src/backend/common.mk

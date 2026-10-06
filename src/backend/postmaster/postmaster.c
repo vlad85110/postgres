@@ -122,6 +122,7 @@
 #include "utils/pidfile.h"
 #include "utils/timestamp.h"
 #include "utils/varlena.h"
+#include "rest/rest_config.h"
 
 #ifdef EXEC_BACKEND
 #include "common/file_utils.h"
@@ -785,6 +786,8 @@ PostmasterMain(int argc, char *argv[])
 	 */
 	if (!SelectConfigFiles(userDoption, progname))
 		ExitPostmaster(2);
+
+	rest_config_parse(rest_config_file);
 
 	if (output_config_variable != NULL)
 	{

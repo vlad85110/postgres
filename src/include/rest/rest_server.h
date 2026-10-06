@@ -44,7 +44,6 @@ typedef struct
     size_t read_pos;
     size_t written;
     bool response_ready;
-
 } Client;
 
 typedef struct
@@ -53,10 +52,8 @@ typedef struct
     int port;
     WaitEventSet *event_set;
     bool need_recreate;
-
     Endpoint endpoints[MAX_ENDPOINTS];
     int endpoints_count;
-
     Client clients[MAX_CLIENTS];
 } RestServer;
 
@@ -64,8 +61,6 @@ extern RestServer *rest_init(int child_type);
 extern void register_endpoint(RestServer *server, const char *url, endpoint_handler handler, void *user_data);
 extern void rest_server_poll(RestServer *server);
 extern const char *get_process_name(int child_type);
-extern char *rest_include_processes;
-extern bool rest_enabled_for_process(int child_type);
 extern RestServer *rest_server;
 
 #endif

@@ -1,4 +1,5 @@
 #include "rest/rest_server.h"
+#include "rest/rest_config.h"
 #include "utils/memutils.h"
 #include <sys/socket.h>
 #include <fcntl.h>
@@ -10,7 +11,7 @@
 #include "replication/walsender.h"
 #include "utils/guc.h"
 
-char *rest_include_processes = NULL;
+char *rest_config_file = NULL;
 extern int PostPortNumber;
 
 RestServer *rest_server = NULL;
@@ -30,52 +31,6 @@ get_process_name(int child_type)
     }
 }
 
-bool
-rest_enabled_for_process(int child_type)
-{
-    if (rest_include_processes == NULL || rest_include_processes[0] == '\0')
-    {
-        return false;
-    }
-
-    const char *proc_name = get_process_name(child_type);
-
-    if (proc_name == NULL)
-    {
-        return false;
-    }
-
-    char *list = palloc(strlen(rest_include_processes) + 1);
-    strcpy(list, rest_include_processes);
-    char *token = strtok(list, ",");
-    bool found = false;
-
-    while (token != NULL)
-    {
-        while (*token == ' ')
-        {
-            token++;
-        }
-
-        char *end = token + strlen(token) - 1;
-        while (end > token && *end == ' ')
-        {
-            end--;
-        }
-        *(end + 1) = '\0';
-
-        if (strcmp(token, proc_name) == 0)
-        {
-            found = true;
-            break;
-        }
-        token = strtok(NULL, ",");
-    }
-
-    pfree(list);
-    return found;
-}
-
 void
 register_endpoint(RestServer *server, const char *url, endpoint_handler handler, void *user_data)
 {
@@ -92,33 +47,19 @@ register_endpoint(RestServer *server, const char *url, endpoint_handler handler,
     }
 }
 
-static int
-rest_port(int child_type)
-{
-    switch(child_type)
-    {
-        case B_WAL_RECEIVER:    return PostPortNumber + 1000;
-        case B_WAL_SENDER:      return PostPortNumber + 1100;
-        case B_WAL_WRITER:      return PostPortNumber + 1200;
-        case B_BG_WRITER:       return PostPortNumber + 1300;
-        case B_CHECKPOINTER:    return PostPortNumber + 1400;
-        case B_AUTOVAC_LAUNCHER:return PostPortNumber + 1500;
-        default:                return -1;
-    }
-}
 RestServer *
 rest_init(int child_type)
 {
     RestServer *server;
     int port;
 
-    if (!rest_enabled_for_process(child_type))
+    const char *proc_name = get_process_name(child_type);
+    if (proc_name == NULL)
     {
         return NULL;
     }
 
-    port = rest_port(child_type);
-
+    port = rest_config_get_port(proc_name);
     if (port == -1)
     {
         return NULL;
