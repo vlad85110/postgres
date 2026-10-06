@@ -571,9 +571,6 @@ AutoVacLauncherMain(const void *startup_data, size_t startup_data_len)
 	 */
 	rebuild_database_list(InvalidOid);
 
-	register_endpoint(rest_server, "/info", handle_info, NULL);
-	register_endpoint(rest_server, "/status", handle_status, NULL);
-
 	/* loop until shutdown request */
 	while (!ShutdownRequestPending)
 	{

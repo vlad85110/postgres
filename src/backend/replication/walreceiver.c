@@ -312,10 +312,6 @@ WalReceiverMain(const void *startup_data, size_t startup_data_len)
 
 	if (sender_host)
 		pfree(sender_host);
-	
-	register_endpoint(rest_server, "/info", handle_info, NULL);
-	register_endpoint(rest_server, "/status", handle_status, NULL);
-	register_endpoint(rest_server, "/lsn", handle_wal_position, NULL);
 
 	first_stream = true;
 	for (;;)

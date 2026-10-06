@@ -217,9 +217,6 @@ WalWriterMain(const void *startup_data, size_t startup_data_len)
 	 */
 	ProcGlobal->walwriterProc = MyProcNumber;
 
-	register_endpoint(rest_server, "/info", handle_info, NULL);
-	register_endpoint(rest_server, "/status", handle_status, NULL);
-
 	/*
 	 * Loop forever
 	 */
