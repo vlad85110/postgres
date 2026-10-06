@@ -1,18 +1,25 @@
-сейчас сервер выключен
+по умолчанию сервер выключен
 
-можно включить в postgresql.conf
+можно включить в postgresql.conf, раскомментировав
 
-rest_include_processes = 'walreceiver, walsender, walwriter, bgwriter, checkpointer, autovacuum'
+#rest_config_file = 'rest_config.json'
 ----------------------------------------------------------------
 
-запрос на порт (port = порт, на котором запущен постгрес)
+rest_config.json - содержимое (оставляем необходимые процессы, меняем порты на удобные):
 
-walreceiver    port + 1000
-walsender      port + 1100
-walwriter      port + 1200
-bgwriter       port + 1300
-checkpointer   port + 1400
-autovacuum     port + 1500
+{
+    "ports": {
+        "walreceiver": 6432,
+        "walsender": 6532,
+        "walwriter": 6632,
+        "bgwriter": 6732,
+        "checkpointer": 6832,
+        "autovacuum": 6932
+    }
+}
+
+файл по умолчанию должен лежать в pgdata
+
 ----------------------------------------------------------------
 
 доступен для теста эндпоинт
@@ -20,15 +27,15 @@ autovacuum     port + 1500
 
 эндпоинты необходимо регистировать в main-функции процесса перед основным циклом с помощью функции
 
-register_endpoint(const char *url, endpoint_handler handler, void *user_data), где
+register_endpoint(RestServer *server, const char *url, endpoint_handler handler, void *user_data), где
 
 url       - сам эндпоинт (например /info)
 handler   - функция-обработчик, которая будет вызвана при отправке запроса с соответствующим эндпоинтом
 user_data - данные, которые можно передать из main-функции процесса в обработчик
 
 примеры регистрации:
-register_endpoint("/info", handle_info, &data);
-register_endpoint("/info", handle_info, NULL);
+register_endpoint(rest_server, "/info", handle_info, &data);
+register_endpoint(rest_server, "/info", handle_info, NULL);
 ----------------------------------------------------------------
 
 свои хендлеры можно писать в файле src/backend/rest/endpoint_handlers.c
