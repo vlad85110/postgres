@@ -52,8 +52,11 @@ rest_init(int child_type)
 {
     RestServer *server;
     int port;
+    int flags;
+    const char *proc_name;
+    struct sockaddr_in server_addr;
 
-    const char *proc_name = get_process_name(child_type);
+    proc_name = get_process_name(child_type);
     if (proc_name == NULL)
     {
         return NULL;
@@ -80,10 +83,9 @@ rest_init(int child_type)
         return NULL;
     }
 
-    int flags = fcntl(server->server_socket, F_GETFL, 0);
+    flags = fcntl(server->server_socket, F_GETFL, 0);
     fcntl(server->server_socket, F_SETFL, flags | O_NONBLOCK);
 
-    struct sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
@@ -104,7 +106,7 @@ rest_init(int child_type)
 
     AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE, server->server_socket, NULL, NULL);
 
-    elog(LOG, "rest: server started on port %d", server->port);
+    elog(LOG, "rest: server started in %s on port %d", proc_name, port);
 
     return server;
 }
@@ -168,6 +170,8 @@ rest_recreate_event_set(RestServer *server)
 static void
 rest_connection_accept(RestServer *server)
 {
+    int slot;
+    int client_flags;
     int client_socket = accept(server->server_socket, NULL, NULL);
 
     if (client_socket < 0)
@@ -180,7 +184,7 @@ rest_connection_accept(RestServer *server)
         return;
     }
 
-    int slot = find_free_slot(server);
+    slot = find_free_slot(server);
 
     if (slot == -1) {
         elog(WARNING, "rest: too many requests, try again later");
@@ -197,7 +201,7 @@ rest_connection_accept(RestServer *server)
     memset(server->clients[slot].read_buffer, 0, sizeof(server->clients[slot].read_buffer));
     memset(server->clients[slot].response, 0, sizeof(server->clients[slot].response));
 
-    int client_flags = fcntl(server->clients[slot].fd, F_GETFL, 0);
+    client_flags = fcntl(server->clients[slot].fd, F_GETFL, 0);
     fcntl(server->clients[slot].fd, F_SETFL, client_flags | O_NONBLOCK);
 
     AddWaitEventToSet(server->event_set, WL_SOCKET_READABLE | WL_SOCKET_WRITEABLE, server->clients[slot].fd, NULL, NULL);
@@ -244,6 +248,10 @@ rest_build_response(Client *client, Response *response)
 static void
 rest_handle_request(RestServer *server, Client *client, int slot)
 {
+    char method[16], url[256];
+    Response response = {200, "OK", "application/json", ""};
+    char *request_body;
+    const char *error_body;
     ssize_t bytes_read = read(client->fd, client->read_buffer + client->read_pos, 
                                           sizeof(client->read_buffer) - client->read_pos - 1);
     if (bytes_read < 0) {
@@ -271,10 +279,6 @@ rest_handle_request(RestServer *server, Client *client, int slot)
         return;
     }
 
-    char method[16], url[256];
-
-    Response response = {200, "OK", "application/json", ""};
-
     if (sscanf(client->read_buffer, "%15s %255s", method, url) != 2)
     {
         response.status_code = 400;
@@ -285,7 +289,7 @@ rest_handle_request(RestServer *server, Client *client, int slot)
         return;
     }
 
-    char *request_body = strstr(client->read_buffer, "\r\n\r\n");
+    request_body = strstr(client->read_buffer, "\r\n\r\n");
     if (request_body)
     {
         request_body += 4;
@@ -301,7 +305,7 @@ rest_handle_request(RestServer *server, Client *client, int slot)
         response.status_code = 404;
         response.status_text = "NotFound";
         response.content_type = "text/plain";
-        const char *error_body = "Invalid request.\n"
+        error_body = "Invalid request.\n"
                 "Try: \ncurl -X <method> http:/<host>:<port>/<endpoint> -H <headers> -d <body>\n\n"
                 "example:\n"
                 "curl -X POST http:/localhost:8080/value/set "
@@ -317,8 +321,8 @@ static void
 rest_handle_response(RestServer *server, Client *client, int slot)
 {
     size_t remaining = client->response_len - client->written;
-
     ssize_t bytes_written = write(client->fd, client->response + client->written, remaining);
+
     if (bytes_written < 0)
     {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -341,6 +345,11 @@ rest_handle_response(RestServer *server, Client *client, int slot)
 void
 rest_server_poll(RestServer *server)
 {
+    int number_of_fd;
+    int slot;
+    Client *client;
+    WaitEvent events[MAX_CLIENTS + 1];
+
     if (server == NULL || server->server_socket < 0 || server->event_set == NULL)
     {
         return;
@@ -351,9 +360,7 @@ rest_server_poll(RestServer *server)
         rest_recreate_event_set(server);
     }
 
-    WaitEvent events[MAX_CLIENTS + 1];
-
-    int number_of_fd = WaitEventSetWait(server->event_set, 0, events, MAX_CLIENTS + 1, 0);
+    number_of_fd = WaitEventSetWait(server->event_set, 0, events, MAX_CLIENTS + 1, 0);
 
     for (int i = 0; i < number_of_fd; i++)
     {
@@ -363,13 +370,13 @@ rest_server_poll(RestServer *server)
             continue;
         }
 
-        int slot = find_slot(server, events[i].fd);
+        slot = find_slot(server, events[i].fd);
         if (slot == -1) {
             elog(WARNING, "rest: client not found");
             continue;
         }
 
-        Client *client = &server->clients[slot];
+        client = &server->clients[slot];
 
         if (events[i].events & WL_SOCKET_READABLE && !client->response_ready)
         {

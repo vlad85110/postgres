@@ -240,13 +240,14 @@ WaitLatchOrSocket(Latch *latch, int wakeEvents, pgsocket sock,
 	int			ret = 0;
 	int			rc;
 	WaitEvent	event;
+	WaitEventSet *set;
+	
 	int max_events = 3;
 	if (rest_server != NULL)
 	{
 		max_events++;
 	}
-
-	WaitEventSet *set = CreateWaitEventSet(CurrentResourceOwner, max_events);
+	set = CreateWaitEventSet(CurrentResourceOwner, max_events);
 
 	if (wakeEvents & WL_TIMEOUT)
 		Assert(timeout >= 0);
