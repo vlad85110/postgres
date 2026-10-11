@@ -203,6 +203,8 @@ rest_config_parse(const char *path)
     if (result != JSON_SUCCESS)
     {
         elog(WARNING, "rest: json parse error: %s", json_error_name(result));
+        rest_config.count = 0;
+        memset(rest_config.entries, 0, sizeof(rest_config.entries));
     }
 
     return result;
