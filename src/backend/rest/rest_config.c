@@ -1,10 +1,43 @@
 #include "rest/rest_config.h"
-#include "postgres.h"
+#include "mb/pg_wchar.h"
 
+extern char *DataDir;
 #define BUF_SIZE 8192
 
 RestConfig rest_config;
-extern char *DataDir;
+
+static const char *
+json_error_name(JsonParseErrorType err)
+{
+    switch (err)
+    {
+        case JSON_SUCCESS:                  return "JSON_SUCCESS";
+        case JSON_INCOMPLETE:               return "JSON_INCOMPLETE";
+        case JSON_INVALID_LEXER_TYPE:       return "JSON_INVALID_LEXER_TYPE";
+        case JSON_NESTING_TOO_DEEP:         return "JSON_NESTING_TOO_DEEP";
+        case JSON_ESCAPING_INVALID:         return "JSON_ESCAPING_INVALID";
+        case JSON_ESCAPING_REQUIRED:        return "JSON_ESCAPING_REQUIRED";
+        case JSON_EXPECTED_ARRAY_FIRST:     return "JSON_EXPECTED_ARRAY_FIRST";
+        case JSON_EXPECTED_ARRAY_NEXT:      return "JSON_EXPECTED_ARRAY_NEXT";
+        case JSON_EXPECTED_COLON:           return "JSON_EXPECTED_COLON";
+        case JSON_EXPECTED_END:             return "JSON_EXPECTED_END";
+        case JSON_EXPECTED_JSON:            return "JSON_EXPECTED_JSON";
+        case JSON_EXPECTED_MORE:            return "JSON_EXPECTED_MORE";
+        case JSON_EXPECTED_OBJECT_FIRST:    return "JSON_EXPECTED_OBJECT_FIRST";
+        case JSON_EXPECTED_OBJECT_NEXT:     return "JSON_EXPECTED_OBJECT_NEXT";
+        case JSON_EXPECTED_STRING:          return "JSON_EXPECTED_STRING";
+        case JSON_INVALID_TOKEN:            return "JSON_INVALID_TOKEN";
+        case JSON_OUT_OF_MEMORY:            return "JSON_OUT_OF_MEMORY";
+        case JSON_UNICODE_CODE_POINT_ZERO:  return "JSON_UNICODE_CODE_POINT_ZERO";
+        case JSON_UNICODE_ESCAPE_FORMAT:    return "JSON_UNICODE_ESCAPE_FORMAT";
+        case JSON_UNICODE_HIGH_ESCAPE:      return "JSON_UNICODE_HIGH_ESCAPE";
+        case JSON_UNICODE_UNTRANSLATABLE:   return "JSON_UNICODE_UNTRANSLATABLE";
+        case JSON_UNICODE_HIGH_SURROGATE:   return "JSON_UNICODE_HIGH_SURROGATE";
+        case JSON_UNICODE_LOW_SURROGATE:    return "JSON_UNICODE_LOW_SURROGATE";
+        case JSON_SEM_ACTION_FAILED:        return "JSON_SEM_ACTION_FAILED";
+    }
+    return "UNKNOWN";
+}
 
 static ssize_t
 read_file_to_buffer(const char *path, char *buffer, size_t buf_size)
@@ -32,145 +65,147 @@ read_file_to_buffer(const char *path, char *buffer, size_t buf_size)
     return bytes_read;
 }
 
-static char *
-read_proc_name(char *cur, char *proc_name, size_t max_len)
+static void
+build_path(const char *path, char *f_path, size_t size)
 {
-    char *name_start;
-    size_t name_len;
-
-    if (*cur != '"')
-    {
-        elog(WARNING, "rest: expected '\"' before process name");
-        return NULL;
-    }
-    cur++;
-
-    name_start = cur;
-    while (*cur != '\0' && *cur != '"')
-    {
-        cur++;
-    }
-
-    if (*cur != '"')
-    {
-        elog(WARNING, "rest: expected '\"' after process name");
-        return NULL;
-    }
-
-    name_len = cur - name_start;
-    if (name_len >= max_len)
-    {
-        name_len = max_len - 1;
-    }
-
-    strncpy(proc_name, name_start, name_len);
-    proc_name[name_len] = '\0';
-    cur++;
-
-    return cur;
-}
-
-static char *
-read_port(char *cur, int *port)
-{
-    if(!isdigit(*cur))
-    {
-        elog(WARNING, "rest: expected number for port");
-        return NULL;
-    }
-
-    *port = atoi(cur);
-
-    while (*cur != '\0' && isdigit(*cur))
-    {
-        cur++;
-    }
-
-    return cur;
-}
-
-static char *
-skip_chars(char *cur, const char *chars) 
-{
-    while (*cur != '\0' && strchr(chars, *cur) != NULL)
-    {
-        cur++;
-    }
-    return cur;
-}
-
-void
-rest_config_parse(const char *path)
-{
-    char f_path[MAXPGPATH];
-    char buffer[BUF_SIZE];
-    char *ports_pos;
-    char *obj_start;
-    char *cur;
-    int count = 0;
-
-    if (path == NULL || path[0] == '\0')
-    {
-        return;
-    }
-
     if (path[0] == '/')
     {
-        strlcpy(f_path, path, sizeof(f_path));
+        strlcpy(f_path, path, size);
     }
     else 
     {
-        snprintf(f_path, sizeof(f_path), "%s/%s", DataDir, path);
+        snprintf(f_path, size, "%s/%s", DataDir, path);
     }
+}
+
+static JsonParseErrorType
+rest_object_start(void *pstate)
+{
+    RestParseState *state = (RestParseState *)pstate;
+    state->depth++;
+
+    return JSON_SUCCESS;
+}
+
+static JsonParseErrorType
+rest_object_end(void *pstate)
+{
+    RestParseState *state = (RestParseState *)pstate;
+    state->depth--;
+
+    if (state->target_depth > 0 && state->depth < state->target_depth)
+    {
+        state->target_depth = 0;
+    }
+
+    return JSON_SUCCESS;
+}
+
+static JsonParseErrorType
+rest_object_field_start(void *pstate, char *fname, bool isnull)
+{
+    RestParseState *state = (RestParseState *)pstate;
+
+    if (fname == NULL)
+    {
+        return JSON_SUCCESS;
+    }
+
+    if (state->target_depth == 0)
+    {
+        if (strcmp(fname, state->target) == 0)
+        {
+            state->target_depth = state->depth + 1;
+        }
+    }
+    else if (state->depth == state->target_depth)
+    {
+        strlcpy(state->current_field, fname, sizeof(state->current_field));
+    }
+
+    return JSON_SUCCESS;
+}
+
+static JsonParseErrorType
+rest_object_field_end(void *pstate, char *fname, bool isnull)
+{
+    RestParseState *state = (RestParseState *)pstate;
+    state->current_field[0] = '\0';
+
+    return JSON_SUCCESS;
+}
+
+static JsonParseErrorType
+rest_scalar(void *pstate, char *token, JsonTokenType tokentype)
+{
+    RestParseState *state = (RestParseState *)pstate;
+
+    if (state->target_depth == 0 || state->depth != state->target_depth || tokentype != JSON_TOKEN_NUMBER)
+    {
+        return JSON_SUCCESS;
+    }
+
+    if (rest_config.count >= MAX_CONFIG_ENTRIES)
+    {
+        return JSON_SUCCESS;
+    }
+
+    for (int i = 0; i < rest_config.count; i++)
+    {
+        if (strcmp(rest_config.entries[i].process_name, state->current_field) == 0)
+        {
+            elog(WARNING, "rest: field \"%s\" is duplicated", state->current_field);
+            return JSON_SEM_ACTION_FAILED;
+        }
+    }
+
+    strlcpy(rest_config.entries[rest_config.count].process_name, state->current_field, 
+            sizeof(rest_config.entries[rest_config.count].process_name));
+    rest_config.entries[rest_config.count].port = atoi(token);
+    rest_config.count++;
+
+    return JSON_SUCCESS;
+}
+
+JsonParseErrorType
+rest_config_parse(const char *path)
+{
+    char buffer[BUF_SIZE];
+    char f_path[MAXPGPATH];
+    JsonSemAction sem = {0};
+    RestParseState state = {0};
+    JsonLexContext lex;
+    JsonParseErrorType result;
+
+    if (path == NULL || path[0] == '\0')
+    {
+        return JSON_SUCCESS;
+    }
+    build_path(path, f_path, sizeof(f_path));
 
     if (read_file_to_buffer(f_path, buffer, sizeof(buffer)) < 0)
     {
-        return;
+        return JSON_INVALID_TOKEN;
     }
 
-    ports_pos = strstr(buffer, "\"ports\"");
-    if (ports_pos == NULL)
+    strlcpy(state.target, "ports", sizeof(state.target));
+
+    sem.object_start = rest_object_start;
+    sem.object_end = rest_object_end;
+    sem.object_field_start = rest_object_field_start;
+    sem.object_field_end = rest_object_field_end;
+    sem.scalar = rest_scalar;
+    sem.semstate = &state;
+
+    makeJsonLexContextCstringLen(&lex, buffer, strlen(buffer), PG_UTF8, true);
+
+    result = pg_parse_json(&lex, &sem);
+    if (result != JSON_SUCCESS)
     {
-        elog(WARNING, "rest: no \"ports:\" in config file");
-        return;
+        elog(WARNING, "rest: json parse error: %s", json_error_name(result));
     }
 
-    obj_start = strchr(ports_pos, '{');
-    if (obj_start == NULL)
-    {
-        elog(WARNING, "rest: no '{' after \"ports:\"");
-        return;
-    }
-    obj_start++;
-
-    cur = obj_start;
-    while (*cur != '\0' && *cur != '}' && count < MAX_CONFIG_ENTRIES)
-    {
-        cur = skip_chars(cur, "\n\r\t, ");
-        if (*cur == '}' || *cur == '\0')
-        {
-            break;
-        }
-
-        cur = read_proc_name(cur, rest_config.entries[count].process_name, sizeof(rest_config.entries[count].process_name));
-        if (cur == NULL)
-        {
-            return;
-        }
-
-        cur = skip_chars(cur, "\n\r\t: ");
-
-        cur = read_port(cur, &rest_config.entries[count].port);
-        if (cur == NULL)
-        {
-            return;
-        }
-
-        count++;
-    }
-
-    rest_config.count = count;
-    elog(DEBUG1, "rest: loaded %d entries", count);
+    return result;
 }
 
 int 
