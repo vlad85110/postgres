@@ -9,6 +9,7 @@
 #include <string.h>
 #include "miscadmin.h"
 #include "replication/walsender.h"
+#include "replication/walsender_private.h"
 #include "utils/guc.h"
 
 char *rest_config_file = NULL;
@@ -31,6 +32,30 @@ get_process_name(int child_type)
     }
 }
 
+static int
+get_port(int child_type, const char *proc_name)
+{
+    int port = rest_config_get_port(proc_name);
+
+    if (port == -1)
+    {
+        return -1;
+    }
+
+    if (child_type == B_WAL_SENDER)
+    {
+        port += MyWalSnd - WalSndCtl->walsnds;
+    }
+
+    if (port < 1024 || port > 65535)
+    {
+        elog(WARNING, "rest: on %s port %d is out of range 1024-65535", proc_name, port);
+        return -1;
+    }
+
+    return port;
+}
+
 void
 register_endpoint(RestServer *server, const char *url, endpoint_handler handler, void *user_data)
 {
@@ -38,6 +63,7 @@ register_endpoint(RestServer *server, const char *url, endpoint_handler handler,
     {
         return;
     }
+
     if (server->endpoints_count < MAX_ENDPOINTS)
     {
         server->endpoints[server->endpoints_count].url = url;
@@ -62,7 +88,7 @@ rest_init(int child_type)
         return NULL;
     }
 
-    port = rest_config_get_port(proc_name);
+    port = get_port(child_type, proc_name);
     if (port == -1)
     {
         return NULL;
