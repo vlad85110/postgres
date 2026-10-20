@@ -20,9 +20,8 @@ typedef struct
 
 typedef struct
 {
-	char target[64];
-	int target_depth;
-	char current_field[64];
+	int ports_depth;
+	char process_name[64];
 	int depth;
 } RestParseState;
 

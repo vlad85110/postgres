@@ -44,7 +44,7 @@ read_file_to_buffer(const char *path, char *buffer, size_t buf_size)
 {
     FILE *file;
     ssize_t bytes_read;
-    
+
     file = fopen(path, "r");
     if (file == NULL)
     {
@@ -53,6 +53,12 @@ read_file_to_buffer(const char *path, char *buffer, size_t buf_size)
     }
 
     bytes_read = fread(buffer, 1, buf_size - 1, file);
+    if (bytes_read == buf_size - 1 && fgetc(file) != EOF)
+    {
+        fclose(file);
+        elog(WARNING, "rest: config file %s is too large", path);
+        return -1;
+    }
     fclose(file);
     if (bytes_read == 0)
     {
@@ -72,10 +78,34 @@ build_path(const char *path, char *f_path, size_t size)
     {
         strlcpy(f_path, path, size);
     }
-    else 
+    else
     {
         snprintf(f_path, size, "%s/%s", DataDir, path);
     }
+}
+
+static bool
+is_duplicate_field(const char *process_name)
+{
+    for (int i = 0; i < rest_config.count; i++)
+    {
+        if (strcmp(rest_config.entries[i].process_name, process_name) == 0)
+        {
+            elog(WARNING, "rest: field \"%s\" is duplicated", process_name);
+            return true;
+        }
+    }
+    return false;
+}
+
+static void
+add_config_entry(const char *process_name, char *token)
+{
+    RestConfigEntry *entry = &rest_config.entries[rest_config.count];
+
+    strlcpy(entry->process_name, process_name, sizeof(entry->process_name));
+    entry->port = atoi(token);
+    rest_config.count++;
 }
 
 static JsonParseErrorType
@@ -93,9 +123,9 @@ rest_object_end(void *pstate)
     RestParseState *state = (RestParseState *)pstate;
     state->depth--;
 
-    if (state->target_depth > 0 && state->depth < state->target_depth)
+    if (state->ports_depth > state->depth)
     {
-        state->target_depth = 0;
+        state->ports_depth = 0;
     }
 
     return JSON_SUCCESS;
@@ -111,16 +141,16 @@ rest_object_field_start(void *pstate, char *fname, bool isnull)
         return JSON_SUCCESS;
     }
 
-    if (state->target_depth == 0)
+    if (state->ports_depth == 0)
     {
-        if (strcmp(fname, state->target) == 0)
+        if (strcmp(fname, "ports") == 0)
         {
-            state->target_depth = state->depth + 1;
+            state->ports_depth = state->depth + 1;
         }
     }
-    else if (state->depth == state->target_depth)
+    else if (state->depth == state->ports_depth)
     {
-        strlcpy(state->current_field, fname, sizeof(state->current_field));
+        strlcpy(state->process_name, fname, sizeof(state->process_name));
     }
 
     return JSON_SUCCESS;
@@ -130,7 +160,7 @@ static JsonParseErrorType
 rest_object_field_end(void *pstate, char *fname, bool isnull)
 {
     RestParseState *state = (RestParseState *)pstate;
-    state->current_field[0] = '\0';
+    state->process_name[0] = '\0';
 
     return JSON_SUCCESS;
 }
@@ -140,7 +170,7 @@ rest_scalar(void *pstate, char *token, JsonTokenType tokentype)
 {
     RestParseState *state = (RestParseState *)pstate;
 
-    if (state->target_depth == 0 || state->depth != state->target_depth || tokentype != JSON_TOKEN_NUMBER)
+    if (state->ports_depth == 0 || state->depth != state->ports_depth || tokentype != JSON_TOKEN_NUMBER)
     {
         return JSON_SUCCESS;
     }
@@ -150,19 +180,12 @@ rest_scalar(void *pstate, char *token, JsonTokenType tokentype)
         return JSON_SUCCESS;
     }
 
-    for (int i = 0; i < rest_config.count; i++)
+    if (is_duplicate_field(state->process_name))
     {
-        if (strcmp(rest_config.entries[i].process_name, state->current_field) == 0)
-        {
-            elog(WARNING, "rest: field \"%s\" is duplicated", state->current_field);
-            return JSON_SEM_ACTION_FAILED;
-        }
+        return JSON_SUCCESS;
     }
 
-    strlcpy(rest_config.entries[rest_config.count].process_name, state->current_field, 
-            sizeof(rest_config.entries[rest_config.count].process_name));
-    rest_config.entries[rest_config.count].port = atoi(token);
-    rest_config.count++;
+    add_config_entry(state->process_name, token);
 
     return JSON_SUCCESS;
 }
@@ -188,8 +211,6 @@ rest_config_parse(const char *path)
         return JSON_INVALID_TOKEN;
     }
 
-    strlcpy(state.target, "ports", sizeof(state.target));
-
     sem.object_start = rest_object_start;
     sem.object_end = rest_object_end;
     sem.object_field_start = rest_object_field_start;
@@ -210,7 +231,7 @@ rest_config_parse(const char *path)
     return result;
 }
 
-int 
+int
 rest_config_get_port(const char *process_name)
 {
     for (int i = 0; i < rest_config.count; i++)
