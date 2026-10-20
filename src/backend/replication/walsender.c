@@ -95,6 +95,8 @@
 #include "utils/ps_status.h"
 #include "utils/timeout.h"
 #include "utils/timestamp.h"
+#include "rest/rest_server.h"
+#include "rest/endpoint_handlers.h"
 
 /* Minimum interval used by walsender for stats flushes, in ms */
 #define WALSENDER_STATS_FLUSH_INTERVAL         1000
@@ -291,6 +293,7 @@ static bool TransactionIdInRecentPast(TransactionId xid, uint32 epoch);
 static void WalSndSegmentOpen(XLogReaderState *state, XLogSegNo nextSegNo,
 							  TimeLineID *tli_p);
 
+static bool rest_initialized = false;
 
 /* Initialize walsender process before entering the main command loop */
 void
@@ -2836,6 +2839,19 @@ WalSndLoop(WalSndSendDataCallback send_data)
 	last_reply_timestamp = GetCurrentTimestamp();
 	waiting_for_ping_response = false;
 
+	if (!rest_initialized)
+	{
+		rest_initialized = true;
+		rest_server = rest_init(MyBackendType);
+
+		if (rest_server != NULL)
+		{
+			register_endpoint(rest_server, "/info", handle_info, NULL);
+			register_endpoint(rest_server, "/status", handle_status, NULL);
+			AddWaitEventToSet(FeBeWaitSet, WL_SOCKET_READABLE, rest_server->server_socket, NULL, NULL);
+		}
+	}
+
 	/*
 	 * Loop until we reach the end of this timeline or the client requests to
 	 * stop streaming.
@@ -2846,6 +2862,8 @@ WalSndLoop(WalSndSendDataCallback send_data)
 		ResetLatch(MyLatch);
 
 		CHECK_FOR_INTERRUPTS();
+
+		rest_server_poll(rest_server);
 
 		/* Process any requests or signals received recently */
 		if (ConfigReloadPending)
@@ -3807,11 +3825,21 @@ WalSndWait(uint32 socket_events, long timeout, uint32 wait_event)
 	else if (MyWalSnd->kind == REPLICATION_KIND_LOGICAL)
 		ConditionVariablePrepareToSleep(&WalSndCtl->wal_replay_cv);
 
-	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1 &&
-		(event.events & WL_POSTMASTER_DEATH))
+	if (WaitEventSetWait(FeBeWaitSet, timeout, &event, 1, wait_event) == 1)
 	{
-		ConditionVariableCancelSleep();
-		proc_exit(1);
+		
+		if (rest_server != NULL && event.events & WL_SOCKET_READABLE && event.fd == rest_server->server_socket)
+		{
+			ConditionVariableCancelSleep();
+			rest_server_poll(rest_server);
+		}
+
+		else if (event.events & WL_POSTMASTER_DEATH)
+		{
+			ConditionVariableCancelSleep();
+			proc_exit(1);
+		}
+		
 	}
 
 	ConditionVariableCancelSleep();

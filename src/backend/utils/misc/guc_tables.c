@@ -102,6 +102,7 @@
 #include "utils/ps_status.h"
 #include "utils/rls.h"
 #include "utils/xml.h"
+#include "rest/rest_config.h"
 
 #ifdef TRACE_SYNCSCAN
 #include "access/syncscan.h"
@@ -4993,6 +4994,16 @@ struct config_string ConfigureNamesString[] =
 		check_log_connections, assign_log_connections, NULL
 	},
 
+	{
+		{"rest_config_file", PGC_POSTMASTER, CUSTOM_OPTIONS,
+			gettext_noop("Path to REST server config file."),
+			NULL,
+			GUC_NOT_IN_SAMPLE
+		},
+		&rest_config_file,
+		"",
+		NULL, NULL, NULL
+	},
 
 	/* End-of-list marker */
 	{
