@@ -344,9 +344,6 @@ CheckpointerMain(const void *startup_data, size_t startup_data_len)
 	 */
 	ProcGlobal->checkpointerProc = MyProcNumber;
 
-	register_endpoint(rest_server, "/info", handle_info, NULL);
-	register_endpoint(rest_server, "/status", handle_status, NULL);
-
 	/*
 	 * Loop until we've been asked to write the shutdown checkpoint or
 	 * terminate.
